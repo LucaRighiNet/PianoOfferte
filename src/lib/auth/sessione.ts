@@ -5,7 +5,9 @@ import {
   COOKIE_SVILUPPO,
   leggiIdentitaSviluppo,
   leggiPrincipalEasyAuth,
+  modalitaAmmessa,
   modalitaConfigurata,
+  ModalitaNonAmmessa,
   type IdentitaGrezza,
   type ModalitaAutenticazione,
 } from './identita';
@@ -34,12 +36,41 @@ export function modalitaAutenticazione(): ModalitaAutenticazione {
 }
 
 async function identitaDellaRichiesta(): Promise<IdentitaGrezza | null> {
-  if (modalitaAutenticazione() === 'easyauth') {
+  const modalita = modalitaAutenticazione();
+  // Si rifiuta prima di leggere qualunque cosa: una configurazione aperta non
+  // deve produrre un accesso riuscito nemmeno per un istante.
+  if (!modalitaAmmessa(modalita, process.env)) throw new ModalitaNonAmmessa();
+
+  if (modalita === 'easyauth') {
     const intestazioni = await headers();
     return leggiPrincipalEasyAuth(intestazioni.get('x-ms-client-principal'));
   }
   const biscotti = await cookies();
   return leggiIdentitaSviluppo(biscotti.get(COOKIE_SVILUPPO)?.value);
+}
+
+export type StatoAccesso =
+  /** L'ambiente e configurato in modo che l'accesso non sarebbe protetto. */
+  | { readonly tipo: 'CONFIGURAZIONE_NON_AMMESSA'; readonly motivo: string }
+  /** Nessuna identita, o identita non censita fra le persone. */
+  | { readonly tipo: 'NON_IDENTIFICATO' }
+  | { readonly tipo: 'UTENTE'; readonly utente: Utente };
+
+/**
+ * Stato dell'accesso, senza eccezioni: le pagine devono poter distinguere
+ * "non hai fatto accesso" da "questo ambiente e configurato male", perche la
+ * seconda non si risolve accedendo e va detta a chi puo correggerla.
+ */
+export async function statoAccesso(): Promise<StatoAccesso> {
+  try {
+    const utente = await utenteCorrente();
+    return utente === null ? { tipo: 'NON_IDENTIFICATO' } : { tipo: 'UTENTE', utente };
+  } catch (errore) {
+    if (errore instanceof ModalitaNonAmmessa) {
+      return { tipo: 'CONFIGURAZIONE_NON_AMMESSA', motivo: errore.message };
+    }
+    throw errore;
+  }
 }
 
 /** Utente della richiesta, o `null` se non identificato o non censito. */

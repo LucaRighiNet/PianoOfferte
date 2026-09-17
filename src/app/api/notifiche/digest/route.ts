@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { inviaDigestGiornaliero } from '@/lib/server/notifiche';
 import { rispostaDaErrore } from '@/lib/server/risposte';
@@ -18,7 +19,7 @@ export async function POST(richiesta: Request): Promise<NextResponse> {
       { status: 503 },
     );
   }
-  if (richiesta.headers.get('x-chiave-notifiche') !== attesa) {
+  if (!chiaviCoincidono(richiesta.headers.get('x-chiave-notifiche'), attesa)) {
     return NextResponse.json({ errore: 'Chiave non valida' }, { status: 401 });
   }
 
@@ -27,4 +28,19 @@ export async function POST(richiesta: Request): Promise<NextResponse> {
   } catch (errore) {
     return rispostaDaErrore(errore);
   }
+}
+
+/**
+ * Confronto a tempo costante: un confronto con `!==` esce al primo carattere
+ * diverso, e la differenza di tempo lascia indovinare la chiave un carattere
+ * alla volta. Il costo di farlo bene e nullo.
+ */
+function chiaviCoincidono(ricevuta: string | null, attesa: string): boolean {
+  if (ricevuta === null) return false;
+  const a = Buffer.from(ricevuta, 'utf8');
+  const b = Buffer.from(attesa, 'utf8');
+  // timingSafeEqual pretende la stessa lunghezza: la si confronta a parte, e la
+  // lunghezza di una chiave non e un segreto utile.
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }

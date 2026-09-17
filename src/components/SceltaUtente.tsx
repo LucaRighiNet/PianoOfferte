@@ -24,9 +24,12 @@ export interface PersonaAccesso {
 export function SceltaUtente({
   modalita,
   persone,
+  erroreConfigurazione,
 }: {
   modalita: ModalitaAutenticazione;
   persone: readonly PersonaAccesso[];
+  /** Valorizzato quando l'ambiente e configurato in modo non protetto. */
+  erroreConfigurazione?: string;
 }) {
   const router = useRouter();
   const [inCorso, setInCorso] = useState<string | null>(null);
@@ -70,7 +73,17 @@ export function SceltaUtente({
           Pianificazione Offerte
         </h1>
 
-        {modalita === 'easyauth' ? (
+        {erroreConfigurazione !== undefined ? (
+          <div className="mt-4">
+            <p className="text-[13px]" style={{ color: 'var(--semaforo-rosso)' }} role="alert">
+              {erroreConfigurazione}
+            </p>
+            <p className="mt-2 text-[12px]" style={{ color: 'var(--testo-tenue)' }}>
+              Nessuno puo entrare finche la configurazione non e corretta. Si veda
+              docs/03-esercizio.md, paragrafo sulle variabili d&apos;ambiente.
+            </p>
+          </div>
+        ) : modalita === 'easyauth' ? (
           <div className="mt-4">
             <p className="text-[13px]">
               Sei autenticato con l&apos;account aziendale, ma la tua utenza non risulta fra le

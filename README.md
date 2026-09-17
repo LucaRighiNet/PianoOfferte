@@ -15,7 +15,7 @@ Stato di avanzamento rispetto al piano: `docs/01-stato-avanzamento.md`.
 ```bash
 npm install
 cp .env.example .env        # poi correggere DATABASE_URL
-npm run db:push             # crea lo schema
+npm run db:deploy           # applica le migrazioni
 npm run db:seed             # dati di prova a volume realistico
 npm run dev
 ```
@@ -40,7 +40,10 @@ con quale utenza entrare, e ogni ruolo vede e puo fare cose diverse.
 | `npm run check` | Typecheck, lint e test unitari: il cancello da superare prima di ogni commit |
 | `npm run test` | Solo test unitari |
 | `npm run verifica:ui` | Verifica end-to-end su un server gia avviato, con misura dei tempi |
-| `npm run db:push` | Applica lo schema al database |
+| `npm run db:deploy` | Applica le migrazioni: e il comando da usare in esercizio |
+| `npm run db:migrate` | Crea una nuova migrazione dopo aver modificato lo schema |
+| `npm run db:stato` | Mostra quali migrazioni sono applicate |
+| `npm run db:push` | Sincronizza lo schema senza migrazione. Solo per prove usa e getta: in esercizio si usa `db:deploy` |
 | `npm run db:seed` | Rigenera i dati di prova |
 | `npm run db:studio` | Ispezione del database |
 
@@ -48,10 +51,20 @@ La verifica end-to-end SCRIVE sul database: crea una richiesta di offerta, la
 assegna, sposta una barra. Va eseguita solo su un database di sviluppo. Per
 tornare a uno stato noto: `npm run db:seed`.
 
+Eseguendola contro una compilazione di produzione (`npm run start`) serve il
+consenso esplicito all'accesso di sviluppo, altrimenti il portale rifiuta di
+autenticare e fa bene:
+
+```bash
+CONSENTI_ACCESSO_SVILUPPO=si npm run start &
+npm run verifica:ui
+```
+
 ## Come e fatto
 
 ```
 prisma/schema.prisma        Modello dati
+prisma/migrations/          Migrazioni versionate: si applicano con db:deploy
 prisma/seed.ts              Dati di prova a volume realistico (780 offerte, ~1900 attivita)
 src/lib/data/               Date civili senza ora e formattazione italiana
 src/lib/calendario/         Festivita italiane, capacita netta, espansione durata
@@ -120,6 +133,13 @@ fra le persone non entra: va aggiunto in Impostazioni.
 Il digest giornaliero si invia chiamando `POST /api/notifiche/digest` con
 l'intestazione `x-chiave-notifiche`, da uno scheduler esterno. Scrive solo a chi
 ha davvero qualcosa da fare.
+
+## Sicurezza
+
+L'esito della revisione e in `docs/03-esercizio.md`, par. 3-bis. Il rischio
+residuo principale e uno solo, e non si chiude nel codice: l'applicazione si
+fida dell'intestazione di identita, e quella fiducia vale solo se davanti c'e
+la piattaforma che la inietta e rimuove quelle in arrivo dall'esterno.
 
 ## Conformita
 

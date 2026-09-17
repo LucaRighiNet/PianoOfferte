@@ -9,7 +9,18 @@
  */
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { argv, exit } from 'node:process';
+
+/**
+ * Il browser preinstallato di questo ambiente sta in un percorso fisso; altrove,
+ * per esempio nell'integrazione continua, lo risolve Playwright da se. Inchiodare
+ * il percorso renderebbe lo script eseguibile solo qui.
+ */
+const BROWSER_PREINSTALLATO = '/opt/pw-browsers/chromium';
+const opzioniBrowser = existsSync(BROWSER_PREINSTALLATO)
+  ? { executablePath: BROWSER_PREINSTALLATO }
+  : {};
 
 const SOGLIA_CARICAMENTO_MS = 1500;
 const SOGLIA_FILTRO_MS = 150;
@@ -20,7 +31,7 @@ const cartella = indiceCartella === -1 ? null : argv[indiceCartella + 1];
 if (cartella) await mkdir(cartella, { recursive: true });
 
 const problemi = [];
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const browser = await chromium.launch(opzioniBrowser);
 const pagina = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 
 pagina.on('console', (m) => {

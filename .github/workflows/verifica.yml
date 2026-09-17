@@ -1,0 +1,87 @@
+name: Verifica
+
+# Il cancello descritto nel README, eseguito dalla macchina invece che a mano:
+# typecheck, lint, test unitari, compilazione e verifica end-to-end contro un
+# server reale con un database reale.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  cancello:
+    name: Typecheck, lint, test e verifica end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: piano_offerte
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/piano_offerte?schema=public
+      TZ: Europe/Rome
+      MODALITA_AUTENTICAZIONE: sviluppo
+      # `next start` gira in produzione e la modalita sviluppo li e rifiutata:
+      # qui il consenso e deliberato, ed e proprio il gesto che la regola vuole.
+      CONSENTI_ACCESSO_SVILUPPO: si
+      CANALE_NOTIFICHE: registro
+      CHIAVE_NOTIFICHE: chiave-di-verifica
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installazione dipendenze
+        run: npm ci
+
+      - name: Generazione client Prisma
+        run: npx prisma generate
+
+      - name: Applicazione migrazioni
+        run: npm run db:deploy
+
+      - name: Dati di prova a volume realistico
+        run: npm run db:seed
+
+      - name: Typecheck, lint e test unitari
+        run: npm run check
+
+      - name: Compilazione
+        run: npm run build
+
+      - name: Installazione del browser per la verifica
+        run: npx playwright install --with-deps chromium
+
+      - name: Avvio del server
+        run: npm run start &
+
+      - name: Attesa del server
+        run: npx wait-on http://localhost:3000/accesso --timeout 60000
+
+      - name: Verifica end-to-end
+        run: npm run verifica:ui -- --immagini schermate
+
+      # Le schermate servono a capire un fallimento senza riprodurlo in locale.
+      - name: Conservazione delle schermate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schermate
+          path: schermate/
+          if-no-files-found: ignore
+          retention-days: 7

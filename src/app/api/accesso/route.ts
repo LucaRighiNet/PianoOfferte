@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { COOKIE_SVILUPPO } from '@/lib/auth/identita';
+import { modalitaAmmessa } from '@/lib/auth/identita';
 import { modalitaAutenticazione } from '@/lib/auth/sessione';
 import { leggiCorpo, rispostaDaErrore } from '@/lib/server/risposte';
 
@@ -15,10 +16,17 @@ import { leggiCorpo, rispostaDaErrore } from '@/lib/server/risposte';
 const Corpo = z.object({ email: z.string().email() });
 
 export async function POST(richiesta: Request): Promise<NextResponse> {
-  if (modalitaAutenticazione() === 'easyauth') {
+  const modalita = modalitaAutenticazione();
+  if (modalita === 'easyauth') {
     return NextResponse.json(
       { errore: 'In modalita Entra ID l identita e fornita dalla piattaforma' },
       { status: 404 },
+    );
+  }
+  if (!modalitaAmmessa(modalita, process.env)) {
+    return NextResponse.json(
+      { errore: 'Accesso di sviluppo non ammesso in questo ambiente' },
+      { status: 403 },
     );
   }
 

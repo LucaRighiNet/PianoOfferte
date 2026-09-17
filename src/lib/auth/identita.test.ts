@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   leggiIdentitaSviluppo,
   leggiPrincipalEasyAuth,
+  modalitaAmmessa,
   modalitaConfigurata,
 } from './identita';
 
@@ -117,5 +118,41 @@ describe('identita di sviluppo', () => {
     expect(leggiIdentitaSviluppo(undefined)).toBeNull();
     expect(leggiIdentitaSviluppo('')).toBeNull();
     expect(leggiIdentitaSviluppo('pippo')).toBeNull();
+  });
+});
+
+describe('modalita ammessa nell ambiente', () => {
+  it('easyauth e sempre ammessa', () => {
+    expect(modalitaAmmessa('easyauth', { NODE_ENV: 'production' })).toBe(true);
+    expect(modalitaAmmessa('easyauth', {})).toBe(true);
+  });
+
+  it('sviluppo e ammessa fuori dalla produzione', () => {
+    expect(modalitaAmmessa('sviluppo', { NODE_ENV: 'development' })).toBe(true);
+    expect(modalitaAmmessa('sviluppo', { NODE_ENV: 'test' })).toBe(true);
+    expect(modalitaAmmessa('sviluppo', {})).toBe(true);
+  });
+
+  /**
+   * Il punto della regola: la modalita sviluppo lascia scegliere qualunque
+   * identita a chiunque. Metterla in esercizio per dimenticanza aprirebbe il
+   * portale a chi raggiunge l'indirizzo.
+   */
+  it('sviluppo NON e ammessa in produzione', () => {
+    expect(modalitaAmmessa('sviluppo', { NODE_ENV: 'production' })).toBe(false);
+  });
+
+  it('in produzione serve un consenso esplicito, non un valore qualunque', () => {
+    expect(
+      modalitaAmmessa('sviluppo', { NODE_ENV: 'production', CONSENTI_ACCESSO_SVILUPPO: 'si' }),
+    ).toBe(true);
+    for (const valore of ['true', '1', 'yes', 'SI', '']) {
+      expect(
+        modalitaAmmessa('sviluppo', {
+          NODE_ENV: 'production',
+          CONSENTI_ACCESSO_SVILUPPO: valore,
+        }),
+      ).toBe(false);
+    }
   });
 });
