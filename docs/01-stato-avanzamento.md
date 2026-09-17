@@ -32,9 +32,12 @@ Riferimento: `docs/00-analisi-e-piano.md`. Aggiornato al 17 settembre 2026.
 | 14.1 | Permessi per ruolo applicati al confine dei dati | Fatto | 20 test; verifica end-to-end che un operatore non veda Nuova RDO, Impostazioni ne il carico dei colleghi |
 | S4 | Consuntivo ore, registrabile solo da chi ha svolto il lavoro | Fatto | Regola nei permessi e nell'API; bozza di informativa in docs/02 |
 | S3 | Notifiche: digest giornaliero su registro o Microsoft Graph | Fatto | 25 test su contenuto e configurazione; endpoint provato con e senza chiave |
+| — | Migrazioni versionate, applicate con db:deploy | Fatto | Provate da database vuoto, con seed sopra |
+| — | Integrazione continua: lo stesso cancello, eseguito dalla macchina | Fatto | Flusso con PostgreSQL reale e schermate conservate sui fallimenti |
+| — | Revisione di sicurezza di autenticazione, segreti e rotte | Fatto | Esito in docs/03-esercizio.md par. 3-bis; due difetti trovati e chiusi |
 | S2 | Revisioni offerta | Fatto | Nuova attivita agganciata all'ultima, stessa persona, offerta riportata in revisione; quota di revisioni in dashboard |
 
-Test unitari: 249 su 14 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
+Test unitari: 253 su 14 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
 
 ## Soglie prestazionali, ultima misura
 
@@ -74,6 +77,10 @@ si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
 | Una funzione di permesso che ritornava sempre vero | Rilettura | Rimossa: non esisteva una regola dietro |
 | Il pulsante Nuova RDO restava visibile a un operatore perche una mia sostituzione nel sorgente era andata a vuoto in silenzio | Verifica end-to-end sui ruoli | Rifatta con controllo che si applichi |
 | Contatori del digest che mescolavano messaggi e persone | Lettura dell'esito | Separati: chi pianifica riceve due messaggi |
+| Il README imponeva migrazioni versionate, ma lo schema era sempre stato applicato con db push | Rilettura delle regole che avevo scritto | Migrazione creata con la procedura di baseline non distruttiva |
+| Avevo definito la modalita sviluppo "la meno privilegiata": e falso, lascia scegliere qualunque identita a chiunque | Revisione di sicurezza | In produzione e rifiutata, con messaggio che spiega; si riabilita solo con consenso esplicito |
+| Confronto della chiave delle notifiche con uguaglianza semplice | Revisione di sicurezza | Confronto a tempo costante |
+| Percorso del browser inchiodato a questo ambiente nello script di verifica | Scrittura della CI | Risolto da Playwright quando il percorso non esiste |
 
 ## Cosa manca
 
@@ -90,9 +97,10 @@ Il perimetro concordato e coperto. Cio che resta non e codice.
 |---|---|---|
 | 1 | Numeri reali di D8, D9 e D10: tipi di offerta effettivi, ore davvero dedicate alle offerte, carico non-offerta per persona | Committente |
 | 2 | Validare la bozza di informativa art. 4 e renderla nota prima dell'avvio | Consulente del lavoro e responsabile protezione dati |
-| 3 | Scegliere dove ospitare e configurare `MODALITA_AUTENTICAZIONE=easyauth` con Entra ID davanti | IT |
+| 3 | Scegliere dove ospitare e configurare `MODALITA_AUTENTICAZIONE=easyauth` con Entra ID davanti. Il portale NON va esposto senza quel fronte: vedi docs/03-esercizio.md par. 3 | IT |
 | 4 | Credenziali Microsoft Graph e scheduler giornaliero per il digest | IT |
 | 5 | Due settimane di affiancamento dopo il rilascio, con cronometro sull'inserimento RDO e sull'assegnazione | Committente |
+| 6 | Spostare il ramo predefinito del repository su `main` (un clic nelle impostazioni GitHub) | Committente |
 
 Il primo punto e il piu importante di tutti. Oggi la dashboard dice 88% di
 saturazione media e 78% di consegne in tempo: cifre coerenti e credibili,
