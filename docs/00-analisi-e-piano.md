@@ -610,3 +610,120 @@ Adozione
 Contesto aziendale
 - https://www.righisolutions.com/soluzioni/impianti-industriali/
 - https://anieautomazione.anie.it/scheda-azienda/4751/righi-elettroservizi-spa
+
+---
+
+## 14. Revisione critica del piano (rev. 3)
+
+Rilettura avversariale del piano prima di iniziare lo sviluppo. Nove lacune trovate, in ordine di
+pericolosita. Le prime quattro cambiano il codice, la prima cambia anche il processo aziendale.
+
+### 14.1 Conformita all'art. 4 dello Statuto dei Lavoratori (bloccante, era assente)
+
+Il portale misura saturazione per persona, WIP per persona, aging delle attivita e, con S4, le ore
+effettivamente consuntivate. Sono dati sulla prestazione lavorativa di persone identificate. In
+Italia questo tocca l'art. 4 della L. 300/1970 come riformato dal d.lgs. 151/2015.
+
+Lettura della norma applicata a questo caso:
+
+| Aspetto | Situazione | Conseguenza |
+|---|---|---|
+| Natura dello strumento | Strumento assegnato al lavoratore per rendere la prestazione | [Probabile] Rientra nell'esenzione dall'accordo sindacale preventivo prevista dal comma 2 |
+| Uso dei dati raccolti | Ammesso a tutti i fini connessi al rapporto di lavoro | Solo a condizione che sia data adeguata informazione sulle modalita d'uso e di controllo, e che si rispetti la disciplina privacy |
+| Informativa | Assente nel piano | Da produrre prima del rilascio: regolamento interno chiaro, senza formule generiche, pubblicizzato |
+| Rischio se omessa | Dati inutilizzabili in sede disciplinare o giudiziale, sanzioni | Il rischio non e sullo strumento, e sull'azienda |
+
+La funzione piu esposta e S4, il consuntivo ore: e l'unica che misura la prestazione individuale a
+posteriori invece di pianificarla. Le altre pianificano, non sorvegliano.
+
+Azioni che entrano nel piano:
+- L'informativa e il regolamento interno sono prerequisito di rilascio del taglio 3, non un
+  adempimento successivo. Da far validare a consulente del lavoro e DPO.
+- Visibilita per ruolo: la saturazione individuale e visibile a responsabile e direzione; l'operatore
+  vede la propria e il dato aggregato del team, non quello nominativo dei colleghi.
+- Politica di conservazione: dati di dettaglio 24 mesi, poi solo aggregati. Da confermare col DPO.
+- Nessuna classifica, nessun ranking di produttivita fra persone in interfaccia. La heatmap serve a
+  distribuire il carico, non a confrontare le persone.
+
+Nota: non sono un consulente legale. Quanto sopra e una segnalazione di rischio da far verificare,
+non un parere. [Probabile]
+
+### 14.2 Concorrenza multi-utente (era assente)
+
+Il piano prevede autosave con 6-15 utenti sullo stesso piano, ma non dice cosa succede se due
+persone modificano la stessa attivita. Con l'autosave ottimistico si perdono aggiornamenti in
+silenzio, ed e il modo piu rapido per far perdere fiducia allo strumento.
+
+Soluzione adottata: colonna `versione` su Attivita e Offerta, controllo di concorrenza ottimistico
+sul salvataggio. In caso di conflitto il server rifiuta, il client ricarica la riga e mostra un
+avviso non bloccante che indica chi ha modificato e cosa. Nessun lock pessimistico: bloccherebbe la
+pianificazione.
+
+### 14.3 Riconciliazione dello stato "In ritardo" (incoerenza interna)
+
+Lo screenshot mostra "In ritardo" come valore della colonna STATO, accanto a "Non iniziata" e
+"In corso". Il capitolo 6 lo definisce invece derivato. Le due cose sono incompatibili se non si
+chiarisce il modello.
+
+Modello adottato: lo stato memorizzato ha quattro valori (Non iniziata, In corso, Bloccata,
+Completata). "In ritardo" e un attributo derivato che si sovrappone come badge e come colore, e puo
+coesistere con In corso e con Bloccata. In interfaccia la colonna STATO mostra il derivato quando
+presente, perche e l'informazione piu urgente. Questo replica il comportamento visibile nel beta
+senza duplicare il dato.
+
+### 14.4 Durata contro calendario lavorativo (regola mancante)
+
+Lo screenshot mostra barre con segmenti tratteggiati interni: una attivita attraversa un periodo
+non lavorativo. Il piano non definisce la regola, e senza regola il trascinamento produce risultati
+arbitrari.
+
+Regola adottata: la durata di una attivita e espressa in ore di lavoro, non in giorni di calendario.
+Le date di inizio e fine si ricavano espandendo le ore sui giorni lavorativi della persona
+assegnata, saltando weekend, festivita, chiusure aziendali e assenze individuali. Spostando
+l'inizio, la fine si ricalcola con la stessa regola. Una attivita non puo iniziare in un giorno non
+lavorativo: l'inizio scivola al primo giorno utile.
+
+### 14.5 Relazione fra descrizione, progetto e offerta (ambiguita)
+
+Nello screenshot lo stesso titolo "QUADRI ELETTRICI BT" compare su righe di gruppo diverse, con
+clienti diversi (Torricelli, Cummins, Siad). Non e quindi un progetto: e una descrizione ricorrente.
+La riga di gruppo identifica una singola offerta, distinta da cliente e codice commessa.
+
+Modello adottato: la riga di gruppo e una Offerta. Il campo descrizione e testo libero con
+completamento automatico sui valori gia usati, cosi resta veloce da digitare e coerente nel tempo.
+
+### 14.6 Dati di prova a volume realistico (requisito non verificabile)
+
+Il paragrafo 7.3 fissa 800 righe come soglia prestazionale, e il paragrafo 7.2 prevede una verifica
+al terzo giorno. Nessuno dei due e verificabile senza un insieme di dati realistico.
+
+Azione: il seed genera per default un anno di dati coerenti con D2, cioe circa 780 offerte e 2000
+attivita, con distribuzione realistica su 12 persone, ferie estive e chiusure. La verifica
+prestazionale usa quel seed, non tre righe di esempio.
+
+### 14.7 Fuso orario, settimana e localizzazione (dettaglio che rompe tutto se sbagliato)
+
+Regola adottata: tutte le date di pianificazione sono date civili senza ora, memorizzate come DATE e
+interpretate in Europe/Rome. Settimane ISO 8601 con inizio lunedi, coerente con le etichette W35-W39
+dello screenshot. Nessun uso di `new Date()` senza fuso esplicito nel codice di calcolo.
+
+### 14.8 Comportamento dell'autosave in caso di errore (non definito)
+
+Il beta mostra "Salvato". Non e definito cosa mostra quando il salvataggio fallisce, ne cosa succede
+alle modifiche non salvate.
+
+Regola adottata: tre stati espliciti dell'indicatore, cioe Salvato, Salvataggio in corso, Non
+salvato con motivo e pulsante di ritentativo. Le modifiche non confermate restano visibili e
+marcate, mai scartate in silenzio. Ritentativo automatico con attesa crescente.
+
+### 14.9 Criteri di accettazione per funzione (troppo generici)
+
+I criteri di uscita dei tagli sono descrittivi. Vanno resi misurabili funzione per funzione in fase
+di sviluppo, con test automatici dove la logica e pura (calendario lavorativo, saturazione,
+impilamento corsie) e con una lista di controllo manuale dove e interfaccia.
+
+### 14.10 Cosa non cambia
+
+Le esclusioni del paragrafo 5.4 restano valide dopo la rilettura. La selezione Must e Should non
+cambia. Cambiano il modello dati (versione, regola durata), il processo di rilascio (informativa
+art. 4), e la strategia di prova (seed realistico).

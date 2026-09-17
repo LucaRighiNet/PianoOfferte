@@ -1,0 +1,279 @@
+// Schema Portale Pianificazione Offerte - Righi Solutions
+// Riferimento: docs/00-analisi-e-piano.md capitoli 6 e 14.
+//
+// Convenzioni:
+// - Le date di pianificazione sono date civili senza ora (@db.Date), interpretate
+//   in Europe/Rome. Vedi par. 14.7 del piano.
+// - Le entita modificabili in concorrenza portano `versione` per il controllo
+//   ottimistico. Vedi par. 14.2.
+// - I campi di esito sono presenti ma non esposti in interfaccia: perimetro
+//   deciso dal committente (D7). Vedi par. 1.5.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RuoloUtente {
+  RESPONSABILE
+  OPERATORE
+  KAM
+  DIREZIONE
+  SOLA_LETTURA
+}
+
+enum StatoOfferta {
+  DA_PIANIFICARE
+  PIANIFICATA
+  IN_LAVORAZIONE
+  CONSEGNATA
+  IN_REVISIONE
+  CHIUSA
+}
+
+enum EsitoOfferta {
+  VINTA
+  PERSA
+  ANNULLATA
+  NON_OFFERTA
+}
+
+enum StatoAttivita {
+  NON_INIZIATA
+  IN_CORSO
+  BLOCCATA
+  COMPLETATA
+}
+
+enum CausaleBlocco {
+  ATTESA_DATO_CLIENTE
+  ATTESA_QUOTAZIONE_FORNITORE
+  ATTESA_SPECIFICA_TECNICA
+  PRIORITA_SUPERIORE
+  ALTRO
+}
+
+enum TipoIndisponibilita {
+  FERIE
+  PERMESSO
+  FESTIVITA
+  CHIUSURA_AZIENDALE
+  FORMAZIONE
+  CARICO_NON_OFFERTA
+}
+
+enum Priorita {
+  BASSA
+  NORMALE
+  ALTA
+  URGENTE
+}
+
+model Cliente {
+  id             String    @id @default(cuid())
+  ragioneSociale String    @unique
+  codiceEsterno  String?
+  attivo         Boolean   @default(true)
+  creatoIl       DateTime  @default(now())
+  offerte        Offerta[]
+
+  @@index([attivo, ragioneSociale])
+}
+
+model Persona {
+  id                   String      @id @default(cuid())
+  nome                 String
+  cognome              String
+  email                String      @unique
+  ruolo                RuoloUtente @default(OPERATORE)
+  entraObjectId        String?     @unique
+  // Ore giornaliere teoriche dedicate allo sviluppo offerte.
+  // Non e l'orario contrattuale: risponde alla decisione aperta D9 del piano.
+  capacitaOreGiorno    Decimal     @default(8) @db.Decimal(4, 2)
+  percentualeContratto Int         @default(100)
+  limiteWip            Int         @default(5)
+  attiva               Boolean     @default(true)
+  colore               String      @default("#3b82f6")
+  creataIl             DateTime    @default(now())
+
+  attivita          Attivita[]        @relation("AttivitaAssegnata")
+  offertePresidiate Offerta[]         @relation("KamOfferta")
+  indisponibilita   Indisponibilita[]
+
+  @@index([attiva, cognome, nome])
+}
+
+model TipoOfferta {
+  id      String                @id @default(cuid())
+  nome    String                @unique
+  ordine  Int                   @default(0)
+  attivo  Boolean               @default(true)
+  // Righe di template: quali attivita creare e con quale stima.
+  righe   TemplateRigaOfferta[]
+  offerte Offerta[]
+
+  @@index([attivo, ordine])
+}
+
+model TipoAttivita {
+  id              String  @id @default(cuid())
+  nome            String  @unique
+  stimaDefaultOre Decimal @default(8) @db.Decimal(5, 2)
+  colore          String  @default("#64748b")
+  ordine          Int     @default(0)
+  attivo          Boolean @default(true)
+
+  attivita      Attivita[]
+  righeTemplate TemplateRigaOfferta[]
+
+  @@index([attivo, ordine])
+}
+
+// Riga di template: "una offerta di tipo X contiene le attivita A, B, C".
+// Alimenta M8, l'inserimento RDO sotto i 30 secondi.
+model TemplateRigaOfferta {
+  id             String  @id @default(cuid())
+  tipoOffertaId  String
+  tipoAttivitaId String
+  ordine         Int     @default(0)
+  stimaOre       Decimal @db.Decimal(5, 2)
+
+  tipoOfferta  TipoOfferta  @relation(fields: [tipoOffertaId], references: [id], onDelete: Cascade)
+  tipoAttivita TipoAttivita @relation(fields: [tipoAttivitaId], references: [id], onDelete: Restrict)
+
+  @@unique([tipoOffertaId, ordine])
+  @@index([tipoOffertaId])
+}
+
+model Offerta {
+  id                  String       @id @default(cuid())
+  codice              String       @unique
+  descrizione         String
+  clienteId           String
+  kamId               String?
+  tipoOffertaId       String?
+  valoreStimato       Decimal?     @db.Decimal(12, 2)
+  dataRichiesta       DateTime     @db.Date
+  dataScadenzaCliente DateTime?    @db.Date
+  priorita            Priorita     @default(NORMALE)
+  stato               StatoOfferta @default(DA_PIANIFICARE)
+  colore              String       @default("#0ea5e9")
+  note                String?
+
+  // Predisposti, non esposti in interfaccia (D7, par. 1.5 del piano).
+  esito       EsitoOfferta?
+  motivoEsito String?
+  dataEsito   DateTime?     @db.Date
+
+  versione     Int      @default(0)
+  creataIl     DateTime @default(now())
+  aggiornataIl DateTime @updatedAt
+
+  cliente     Cliente      @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  kam         Persona?     @relation("KamOfferta", fields: [kamId], references: [id], onDelete: SetNull)
+  tipoOfferta TipoOfferta? @relation(fields: [tipoOffertaId], references: [id], onDelete: SetNull)
+  attivita    Attivita[]
+  revisioni   Revisione[]
+
+  @@index([stato, dataScadenzaCliente])
+  @@index([clienteId])
+  @@index([kamId])
+  @@index([dataRichiesta])
+}
+
+model Attivita {
+  id             String         @id @default(cuid())
+  offertaId      String
+  tipoAttivitaId String
+  personaId      String? // null = in coda "Da assegnare" (M5)
+  stimaOre       Decimal        @db.Decimal(5, 2)
+  consuntivoOre  Decimal?       @db.Decimal(5, 2)
+  dataInizio     DateTime?      @db.Date
+  dataFine       DateTime?      @db.Date
+  stato          StatoAttivita  @default(NON_INIZIATA)
+  causaleBlocco  CausaleBlocco?
+  notaBlocco     String?
+  ordine         Int            @default(0)
+  iniziataIl     DateTime? // per l'aging del WIP
+  completataIl   DateTime?
+
+  versione     Int      @default(0)
+  creataIl     DateTime @default(now())
+  aggiornataIl DateTime @updatedAt
+
+  offerta      Offerta      @relation(fields: [offertaId], references: [id], onDelete: Cascade)
+  tipoAttivita TipoAttivita @relation(fields: [tipoAttivitaId], references: [id], onDelete: Restrict)
+  persona      Persona?     @relation("AttivitaAssegnata", fields: [personaId], references: [id], onDelete: SetNull)
+
+  dipendenzeDa    Dipendenza[] @relation("Successore")
+  dipendenzeVerso Dipendenza[] @relation("Predecessore")
+  revisioni       Revisione[]
+
+  @@index([personaId, dataInizio, dataFine])
+  @@index([offertaId, ordine])
+  @@index([stato])
+  @@index([dataInizio, dataFine])
+}
+
+// Solo Fine-Inizio: vedi esclusioni par. 5.4 del piano.
+model Dipendenza {
+  id             String @id @default(cuid())
+  predecessoreId String
+  successoreId   String
+
+  predecessore Attivita @relation("Predecessore", fields: [predecessoreId], references: [id], onDelete: Cascade)
+  successore   Attivita @relation("Successore", fields: [successoreId], references: [id], onDelete: Cascade)
+
+  @@unique([predecessoreId, successoreId])
+  @@index([successoreId])
+}
+
+model Indisponibilita {
+  id          String              @id @default(cuid())
+  personaId   String? // null = evento aziendale valido per tutti
+  dataInizio  DateTime            @db.Date
+  dataFine    DateTime            @db.Date
+  tipo        TipoIndisponibilita
+  // Ore sottratte alla capacita del giorno. null = giorno intero.
+  oreGiorno   Decimal?            @db.Decimal(4, 2)
+  descrizione String?
+
+  persona Persona? @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  @@index([personaId, dataInizio, dataFine])
+  @@index([dataInizio, dataFine])
+}
+
+model Revisione {
+  id         String   @id @default(cuid())
+  offertaId  String
+  numero     Int
+  data       DateTime @db.Date
+  motivo     String?
+  attivitaId String?
+
+  offerta  Offerta   @relation(fields: [offertaId], references: [id], onDelete: Cascade)
+  attivita Attivita? @relation(fields: [attivitaId], references: [id], onDelete: SetNull)
+
+  @@unique([offertaId, numero])
+  @@index([offertaId])
+}
+
+model EventoAudit {
+  id       String   @id @default(cuid())
+  entita   String
+  entitaId String
+  utenteId String?
+  azione   String
+  prima    Json?
+  dopo     Json?
+  creatoIl DateTime @default(now())
+
+  @@index([entita, entitaId, creatoIl])
+  @@index([creatoIl])
+}
