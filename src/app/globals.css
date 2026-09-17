@@ -112,6 +112,201 @@ button {
   color: inherit;
 }
 
+/*
+ * Griglia dei giorni disegnata come SFONDO, non come un nodo per giorno.
+ *
+ * Misurato: con 12 corsie e 63 giorni visibili la versione a nodi produceva
+ * oltre 800 elementi, ripetuti nel documento e nel carico di idratazione. La
+ * griglia pero e regolare, quindi non serve un elemento per esprimerla: bastano
+ * tre gradienti ripetuti. Restano nodi solo le colonne irregolari, cioe
+ * festivita e giorno corrente, che sono poche.
+ *
+ * Le variabili si impostano in linea sul contenitore:
+ *   --larghezza-giorno: larghezza di una colonna
+ *   --sfasamento-settimana: quanto dista il primo lunedi dal bordo sinistro
+ */
+.griglia-giorni {
+  background-repeat: repeat;
+  background-position-x: calc(-1 * var(--sfasamento-settimana));
+  background-image:
+    /* fine settimana: due colonne ogni sette */
+    repeating-linear-gradient(
+      to right,
+      transparent 0 calc(5 * var(--larghezza-giorno)),
+      var(--weekend) calc(5 * var(--larghezza-giorno)) calc(7 * var(--larghezza-giorno))
+    ),
+    /* bordo forte a inizio settimana */
+    repeating-linear-gradient(
+      to right,
+      var(--bordo-forte) 0 1px,
+      transparent 1px calc(7 * var(--larghezza-giorno))
+    ),
+    /* bordo tenue a fine giornata */
+    repeating-linear-gradient(
+      to right,
+      transparent 0 calc(var(--larghezza-giorno) - 1px),
+      var(--bordo) calc(var(--larghezza-giorno) - 1px) var(--larghezza-giorno)
+    );
+}
+
+/*
+ * Celle della riga di capacita.
+ *
+ * Misurato: esprimere il gradiente in un attributo `style` per ogni cella
+ * costava oltre centoquaranta caratteri per cella, e con dodici persone per
+ * sessantatre giorni faceva quasi cento kilobyte di solo attributo. La forma
+ * e sempre la stessa: cambia il colore, che dipende da cinque fasce, e
+ * l'altezza del riempimento. Il colore va in una classe, l'altezza in una
+ * variabile.
+ */
+.cella-carico {
+  width: var(--larghezza-giorno);
+  height: 100%;
+  border-right: 1px solid var(--bordo);
+  background-image:
+    linear-gradient(
+      to top,
+      var(--colore-fascia) 0 var(--pieno),
+      transparent var(--pieno) 100%
+    ),
+    linear-gradient(to top, var(--bordo-forte) 0 2px, transparent 2px);
+}
+
+.cella-carico[data-fascia='NON_LAVORATIVO'] {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--carico-non-lavorativo) 0 3px,
+    transparent 3px 6px
+  );
+}
+
+.cella-carico[data-fascia='SCARICO'] {
+  --colore-fascia: var(--carico-scarico);
+}
+.cella-carico[data-fascia='SANO'] {
+  --colore-fascia: var(--carico-sano);
+}
+.cella-carico[data-fascia='PIENO'] {
+  --colore-fascia: var(--carico-pieno);
+}
+.cella-carico[data-fascia='SOVRACCARICO'] {
+  --colore-fascia: var(--carico-sovraccarico);
+}
+
+/*
+ * Barre delle attivita.
+ *
+ * Misurato: tenere forma, bordi, raggi e stati in un attributo `style` per
+ * ogni barra costava oltre trecento caratteri a barra. Cio che varia davvero e
+ * solo posizione, larghezza e colore del tipo: il resto dipende da stato e
+ * taglio, che sono pochi valori e stanno in classi.
+ */
+.barra-attivita {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  padding-left: 7px;
+  padding-right: 4px;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.barra-attivita[data-trascinabile='true'] {
+  cursor: grab;
+}
+
+.barra-attivita[data-stato='NON_INIZIATA'] {
+  opacity: 0.68;
+  border-style: dashed;
+  border-color: rgba(0, 0, 0, 0.28);
+}
+.barra-attivita[data-stato='COMPLETATA'] {
+  opacity: 0.38;
+}
+.barra-attivita[data-stato='BLOCCATA'] {
+  border: 1.5px dashed var(--semaforo-ambra);
+}
+.barra-attivita[data-stato='IN_RITARDO'] {
+  border: 1.5px solid var(--semaforo-rosso);
+}
+
+.barra-attivita[data-taglio='inizio'],
+.barra-attivita[data-taglio='entrambi'] {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-left: 4px;
+}
+.barra-attivita[data-taglio='fine'],
+.barra-attivita[data-taglio='entrambi'] {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.barra-attivita[data-selezionata='true'] {
+  box-shadow: 0 0 0 2px var(--oggi);
+}
+.barra-attivita[data-in-movimento='true'] {
+  opacity: 0.3;
+}
+
+/* Filetto con il colore dell'offerta, sul bordo sinistro della barra. */
+.filetto-offerta {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  pointer-events: none;
+}
+
+/* Giorni non lavorativi dentro una barra, e segnale di rischio a destra. */
+.tratteggio-barra {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.5) 0 3px,
+    rgba(255, 255, 255, 0) 3px 6px
+  );
+}
+
+.segnale-rischio {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--semaforo-rosso);
+  pointer-events: none;
+}
+
+/* Colonne irregolari: poche, quindi restano elementi. */
+.colonna-festivita {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--festivita);
+  pointer-events: none;
+}
+
+.colonna-oggi {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--oggi-colonna);
+  pointer-events: none;
+}
+
 /* La griglia temporale: una colonna per giorno, larghezza guidata da una
    variabile cosi lo zoom e un solo cambio di valore invece di un ricalcolo. */
 .griglia-tempo {

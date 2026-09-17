@@ -97,13 +97,15 @@ type StatoSalvataggio =
 export function Pianificatore({
   dati,
   ancoraIniziale,
+  zoomIniziale,
 }: {
   dati: PianoDati;
   ancoraIniziale: DataCivile;
+  zoomIniziale: LivelloZoom;
 }) {
   const router = useRouter();
   const [ancora, setAncora] = useState<DataCivile>(ancoraIniziale);
-  const [zoom, setZoom] = useState<LivelloZoom>('NORMALE');
+  const [zoom, setZoom] = useState<LivelloZoom>(zoomIniziale);
   const [modo, setModo] = useState<Raggruppamento>('RISORSA');
   const [filtroStato, setFiltroStato] = useState<FiltroStato>('ATTIVE');
   const [filtroPersona, setFiltroPersona] = useState<string>('');
@@ -163,8 +165,8 @@ export function Pianificatore({
 
   useEffect(() => {
     if (!fuoriDalCaricato) return;
-    router.replace(`/pianificazione?da=${ancora}`);
-  }, [fuoriDalCaricato, ancora, router]);
+    router.replace(`/pianificazione?da=${ancora}&zoom=${zoom}`);
+  }, [fuoriDalCaricato, ancora, zoom, router]);
 
   // --- calendario e allocazione ------------------------------------------
   const calendario = useMemo(() => {
@@ -190,6 +192,16 @@ export function Pianificatore({
   const coloriTipo = useMemo(
     () => new Map(dati.tipiAttivita.map((t) => [t.id, t.colore])),
     [dati.tipiAttivita],
+  );
+
+  /** Nome del tipo per identificativo: non viaggia su ogni attivita. */
+  const nomiTipo = useMemo(
+    () => new Map(dati.tipiAttivita.map((t) => [t.id, t.nome])),
+    [dati.tipiAttivita],
+  );
+  const nomeTipoDi = useCallback(
+    (tipoAttivitaId: string): string => nomiTipo.get(tipoAttivitaId) ?? 'Attivita',
+    [nomiTipo],
   );
 
   /** Applica al volo gli stati cambiati dall'utente ma non ancora ricaricati. */
@@ -246,6 +258,27 @@ export function Pianificatore({
     [finestraDa, finestraA, calendario, dati.oggi],
   );
 
+  /**
+   * Colonne che la griglia di sfondo non sa esprimere: festivita e giorno
+   * corrente. Sono poche e si calcolano una volta per la finestra, non una
+   * volta per riga.
+   */
+  const colonneIrregolari = useMemo(() => {
+    const festivita: { colonna: number; nome: string }[] = [];
+    let oggiColonna: number | null = null;
+    giorni.forEach((g, colonna) => {
+      if (g.festivita !== null) festivita.push({ colonna, nome: g.festivita });
+      if (g.oggi) oggiColonna = colonna;
+    });
+    return { festivita, oggiColonna };
+  }, [giorni]);
+
+  /** Distanza del primo lunedi dal bordo sinistro, per allineare lo sfondo. */
+  const sfasamentoSettimana = useMemo(
+    () => (giornoSettimanaIso(finestraDa) - 1) * definizione.larghezzaGiorno,
+    [finestraDa, definizione.larghezzaGiorno],
+  );
+
   const personeVisibili = useMemo(
     () => (filtroPersona === '' ? dati.persone : dati.persone.filter((p) => p.id === filtroPersona)),
     [dati.persone, filtroPersona],
@@ -293,7 +326,7 @@ export function Pianificatore({
 
       voci.push({
         attivitaId: prima.id,
-        etichetta: prima.tipoAttivita,
+        etichetta: nomeTipoDi(prima.tipoAttivitaId),
         stimaOre: ordinate.reduce((somma, a) => somma + a.stimaOre, 0),
         versione: prima.versione,
         attivitaInCatena: ordinate.length,
@@ -301,7 +334,7 @@ export function Pianificatore({
       });
     }
     return voci;
-  }, [dati.attivita, offerteMappa, filtroCliente, filtroKam]);
+  }, [dati.attivita, offerteMappa, filtroCliente, filtroKam, nomeTipoDi]);
 
   const attivitaSelezionata = useMemo(() => {
     if (selezionata === null) return null;
@@ -350,7 +383,7 @@ export function Pianificatore({
         setSalvataggio({ tipo: 'SALVATO' });
         annulla.registra({
           attivitaId: attivita.id,
-          descrizione: `stato di ${attivita.tipoAttivita}`,
+          descrizione: `stato di ${nomeTipoDi(attivita.tipoAttivitaId)}`,
           ripristino: {
             tipo: 'STATO',
             stato: statoPrecedente,
@@ -782,11 +815,14 @@ export function Pianificatore({
                     modo={modo}
                     calendario={calendario}
                     coloriTipo={coloriTipo}
+                    nomiTipo={nomiTipo}
                     allocazione={
                       gruppo.personaId !== null ? allocazione.get(gruppo.personaId) : undefined
                     }
                     offerteMappa={offerteMappa}
                     dipendenze={dati.dipendenze}
+                    colonneIrregolari={colonneIrregolari}
+                    sfasamentoSettimana={sfasamentoSettimana}
                     oggi={dati.oggi}
                     selezionata={selezionata}
                     idInMovimento={trascinamento?.origine.attivitaId ?? null}
@@ -901,6 +937,7 @@ export function Pianificatore({
           oggi={dati.oggi}
           calendario={calendario}
           utente={dati.utente}
+          nomeTipo={nomeTipoDi(attivitaSelezionata.tipoAttivitaId)}
           onCambiaStato={(nuovo) => void cambiaStato(attivitaSelezionata, nuovo)}
           onApriRevisione={() => void apriRevisione(attivitaSelezionata.offertaId)}
           onChiudi={() => setSelezionata(null)}
@@ -1028,9 +1065,12 @@ function RigaGruppo({
   modo,
   calendario,
   coloriTipo,
+  nomiTipo,
   allocazione,
   offerteMappa,
   dipendenze,
+  colonneIrregolari,
+  sfasamentoSettimana,
   oggi,
   selezionata,
   idInMovimento,
@@ -1045,9 +1085,15 @@ function RigaGruppo({
   modo: Raggruppamento;
   calendario: CalendarioLavorativo;
   coloriTipo: ReadonlyMap<string, string>;
+  nomiTipo: ReadonlyMap<string, string>;
   allocazione: ReadonlyMap<DataCivile, number> | undefined;
   offerteMappa: ReadonlyMap<string, PianoDati['offerte'][number]>;
   dipendenze: readonly PianoDati['dipendenze'][number][];
+  colonneIrregolari: {
+    readonly festivita: readonly { readonly colonna: number; readonly nome: string }[];
+    readonly oggiColonna: number | null;
+  };
+  sfasamentoSettimana: number;
   oggi: DataCivile;
   selezionata: string | null;
   idInMovimento: string | null;
@@ -1229,18 +1275,32 @@ function RigaGruppo({
       </div>
 
       <div className="relative shrink-0" style={{ minHeight: altezzaTotale }}>
-        <div className="pointer-events-none absolute inset-0 flex" aria-hidden="true">
-          {giorni.map((g) => (
-            <div
-              key={g.data}
-              className="fascia-giorno h-full"
-              data-weekend={g.weekend}
-              data-festivita={g.festivita !== null}
-              data-oggi={g.oggi}
-              data-inizio-settimana={g.inizioSettimana}
-              style={{ width: larghezzaGiorno }}
+        <div
+          className="griglia-giorni pointer-events-none absolute inset-0"
+          aria-hidden="true"
+          style={
+            {
+              '--larghezza-giorno': `${larghezzaGiorno}px`,
+              '--sfasamento-settimana': `${sfasamentoSettimana}px`,
+            } as React.CSSProperties
+          }
+        >
+          {colonneIrregolari.festivita.map((f) => (
+            <span
+              key={f.colonna}
+              className="colonna-festivita"
+              style={{ left: f.colonna * larghezzaGiorno, width: larghezzaGiorno }}
             />
           ))}
+          {colonneIrregolari.oggiColonna !== null ? (
+            <span
+              className="colonna-oggi"
+              style={{
+                left: colonneIrregolari.oggiColonna * larghezzaGiorno,
+                width: larghezzaGiorno,
+              }}
+            />
+          ) : null}
         </div>
 
         {carico ? (
@@ -1294,6 +1354,7 @@ function RigaGruppo({
               }
             }
 
+            const nomeTipo = nomiTipo.get(a.tipoAttivitaId) ?? 'Attivita';
             const margine = valutaMargine(fine, offerta?.dataScadenzaCliente ?? null, {
               calendario,
               personaId:
@@ -1307,9 +1368,9 @@ function RigaGruppo({
               etichetta: etichettaDi(
                 offerta?.cliente ?? '',
                 offerta?.descrizione ?? '',
-                a.tipoAttivita,
+                nomeTipo,
               ),
-              tipoAttivita: a.tipoAttivita,
+              tipoAttivita: nomeTipo,
               offertaCodice: offerta?.codice ?? '',
               offertaDescrizione: offerta?.descrizione ?? '',
               cliente: offerta?.cliente ?? '',
@@ -1349,7 +1410,7 @@ function RigaGruppo({
                       dataInizio: inizio,
                       personaIdPrecedente: a.personaId,
                       stimaOre: a.stimaOre,
-                      etichetta: `${offerta?.descrizione ?? ''} · ${a.tipoAttivita}`,
+                      etichetta: `${offerta?.descrizione ?? ''} · ${nomeTipo}`,
                     },
                     evento,
                   )
@@ -1363,7 +1424,7 @@ function RigaGruppo({
                       dataInizio: inizio,
                       personaIdPrecedente: a.personaId,
                       stimaOre: a.stimaOre,
-                      etichetta: `${offerta?.descrizione ?? ''} · ${a.tipoAttivita}`,
+                      etichetta: `${offerta?.descrizione ?? ''} · ${nomeTipo}`,
                     },
                     evento,
                   )
@@ -1384,6 +1445,7 @@ function DettaglioSelezione({
   oggi,
   calendario,
   utente,
+  nomeTipo,
   onCambiaStato,
   onApriRevisione,
   onChiudi,
@@ -1395,6 +1457,7 @@ function DettaglioSelezione({
   oggi: DataCivile;
   calendario: CalendarioLavorativo;
   utente: PianoDati['utente'];
+  nomeTipo: string;
   onCambiaStato: (nuovo: StatoAttivitaMemorizzato) => void;
   onApriRevisione: () => void;
   onChiudi: () => void;
@@ -1441,7 +1504,7 @@ function DettaglioSelezione({
           </span>
         </div>
         <div className="truncate text-[11px]" style={{ color: 'var(--testo-tenue)' }}>
-          {attivita.tipoAttivita} · {formatoOre(attivita.stimaOre)} ·{' '}
+          {nomeTipo} · {formatoOre(attivita.stimaOre)} ·{' '}
           {persona ? `${persona.nome} ${persona.cognome}` : 'Non assegnata'}
           {attivita.dataInizio && attivita.dataFine
             ? ` · ${formatoBreve(attivita.dataInizio)} — ${formatoBreve(attivita.dataFine)}`

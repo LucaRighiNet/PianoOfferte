@@ -49,23 +49,15 @@ export interface DatiBarra {
   readonly giorniNonLavorativi: readonly number[];
 }
 
-const TRATTEGGIO =
-  'repeating-linear-gradient(45deg, rgba(255,255,255,0.5) 0 3px, rgba(255,255,255,0) 3px 6px)';
-
 /** Il bordo sinistro della barra rispetto al bordo della griglia. */
 const SCOSTAMENTO_BARRA = 1;
 
-function bordoDi(stato: StatoVisualizzato): string {
-  if (stato === 'IN_RITARDO') return '1.5px solid var(--semaforo-rosso)';
-  if (stato === 'BLOCCATA') return '1.5px dashed var(--semaforo-ambra)';
-  if (stato === 'NON_INIZIATA') return '1px dashed rgba(0,0,0,0.28)';
-  return '1px solid rgba(0,0,0,0.14)';
-}
-
-function opacitaDi(stato: StatoVisualizzato): number {
-  if (stato === 'COMPLETATA') return 0.38;
-  if (stato === 'NON_INIZIATA') return 0.68;
-  return 1;
+/** Quale lato e stato tagliato dai bordi della finestra. */
+function taglioDi(c: Collocazione): 'nessuno' | 'inizio' | 'fine' | 'entrambi' {
+  if (c.tagliataInizio && c.tagliataFine) return 'entrambi';
+  if (c.tagliataInizio) return 'inizio';
+  if (c.tagliataFine) return 'fine';
+  return 'nessuno';
 }
 
 export const BarraAttivita = memo(function BarraAttivita({
@@ -126,35 +118,24 @@ export const BarraAttivita = memo(function BarraAttivita({
       onPointerDown={onIniziaSpostamento}
       title={titolo}
       aria-label={titolo.replace(/\n/g, '. ')}
-      className="absolute flex items-center overflow-hidden rounded-[4px] text-left text-[11px] leading-none outline-none focus-visible:ring-2"
+      className="barra-attivita focus-visible:ring-2"
+      data-stato={dati.stato}
+      data-taglio={taglioDi(collocazione)}
+      data-selezionata={selezionata}
+      data-in-movimento={inMovimento}
+      data-trascinabile={onIniziaSpostamento !== undefined}
       style={{
         left: collocazione.sinistra + SCOSTAMENTO_BARRA,
         top: alto,
         width: larghezza,
         height: altezza,
         background: dati.coloreTipo,
-        opacity: inMovimento ? 0.3 : opacitaDi(dati.stato),
-        cursor: onIniziaSpostamento ? 'grab' : 'pointer',
-        touchAction: 'none',
-        color: '#fff',
-        border: bordoDi(dati.stato),
-        boxShadow: selezionata ? '0 0 0 2px var(--oggi)' : 'none',
-        borderTopLeftRadius: collocazione.tagliataInizio ? 0 : 4,
-        borderBottomLeftRadius: collocazione.tagliataInizio ? 0 : 4,
-        borderTopRightRadius: collocazione.tagliataFine ? 0 : 4,
-        borderBottomRightRadius: collocazione.tagliataFine ? 0 : 4,
-        paddingLeft: collocazione.tagliataInizio ? 4 : 7,
-        paddingRight: 4,
       }}
     >
       {/* Filetto con il colore dell'offerta: lega fra loro le attivita della
           stessa offerta senza occupare tutto il riempimento. */}
       {!collocazione.tagliataInizio ? (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 bottom-0 left-0"
-          style={{ width: 3, background: dati.coloreOfferta }}
-        />
+        <span aria-hidden="true" className="filetto-offerta" style={{ background: dati.coloreOfferta }} />
       ) : null}
 
       {/* Giorni non lavorativi interni: riproduce le barre spezzate del beta. */}
@@ -162,23 +143,16 @@ export const BarraAttivita = memo(function BarraAttivita({
         <span
           key={colonna}
           aria-hidden="true"
-          className="pointer-events-none absolute top-0 bottom-0"
+          className="tratteggio-barra"
           style={{
             left: colonna * larghezzaGiorno - collocazione.sinistra - SCOSTAMENTO_BARRA,
             width: larghezzaGiorno,
-            background: TRATTEGGIO,
           }}
         />
       ))}
 
       {/* Segnale di rischio: l'offerta non ha margine sulla scadenza. */}
-      {aRischio ? (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 right-0 bottom-0"
-          style={{ width: 4, background: 'var(--semaforo-rosso)' }}
-        />
-      ) : null}
+      {aRischio ? <span aria-hidden="true" className="segnale-rischio" /> : null}
 
       {dentro ? <span className="relative truncate">{dati.etichetta}</span> : null}
 

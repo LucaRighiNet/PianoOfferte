@@ -25,7 +25,7 @@ function offerta(id: string, p: Partial<OffertaVista> = {}): OffertaVista {
 
 function attivita(id: string, p: Partial<AttivitaVista> = {}): AttivitaVista {
   return {
-    id, offertaId: 'o1', tipoAttivitaId: 't1', tipoAttivita: 'Sviluppo offerta',
+    id, offertaId: 'o1', tipoAttivitaId: 't1',
     personaId: 'p1', stimaOre: 8, consuntivoOre: null, dataInizio: dataCivile('2026-09-16'),
     dataFine: dataCivile('2026-09-16'), stato: 'IN_CORSO', causaleBlocco: null,
     iniziataIl: null, ordine: 0, versione: 0, ...p,

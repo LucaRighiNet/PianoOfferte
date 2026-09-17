@@ -43,7 +43,11 @@ funzionano.
 11. Un colore di stato non porta mai il significato da solo: accanto c'e sempre
     un numero o un'etichetta.
 12. Una funzione vuota e un errore di lint, non una svista.
-13. Le dipendenze formano una unione di cammini semplici, imposta dallo schema:
+13. Cio che si ripete su ogni elemento sta in una classe, non in un attributo
+    `style`. Con centinaia di barre e migliaia di celle, una stringa di stile
+    ripetuta pesa piu del disegno che descrive. In linea restano solo posizione,
+    dimensione e colore variabile.
+14. Le dipendenze formano una unione di cammini semplici, imposta dallo schema:
     al massimo un successore e un predecessore per attivita. Il codice percorre
     una catena, non un grafo. Se un giorno servisse un grafo aciclico servono
     ordinamento topologico e cammino critico, ed e una decisione di prodotto da
@@ -87,3 +91,8 @@ serve un calcolo, va in `src/lib` con il suo test.
 - Un'invariante assunta dal codice e non imposta dallo schema prima o poi viene
   violata, e il codice fallisce in silenzio. Se il codice assume qualcosa sulla
   forma dei dati, lo deve garantire il database.
+- Ottimizzare senza misurare e tirare a indovinare. La griglia dei giorni
+  sembrava il costo principale e valeva il 14%; il vero peso erano gli attributi
+  di stile ripetuti e la finestra di dati caricata. Il database, sospettato per
+  primo, esegue in un millesimo e mezzo.
+- Una griglia regolare non ha bisogno di un elemento per colonna: e uno sfondo.

@@ -41,11 +41,16 @@ export interface OffertaVista {
   readonly priorita: string;
 }
 
+/**
+ * Il NOME del tipo di attivita non viaggia qui: il client ha gia `tipiAttivita`
+ * come tabella di consultazione per identificativo. Ripeterlo su ogni attivita
+ * significava trasmetterlo centinaia di volte, due volte ciascuna fra documento
+ * e idratazione.
+ */
 export interface AttivitaVista {
   readonly id: string;
   readonly offertaId: string;
   readonly tipoAttivitaId: string;
-  readonly tipoAttivita: string;
   readonly personaId: string | null;
   readonly stimaOre: number;
   readonly consuntivoOre: number | null;
@@ -153,7 +158,6 @@ export async function caricaPiano(
         ],
       },
       include: {
-        tipoAttivita: { select: { nome: true } },
         offerta: {
           include: {
             cliente: { select: { id: true, ragioneSociale: true } },
@@ -231,7 +235,6 @@ export async function caricaPiano(
       id: a.id,
       offertaId: a.offertaId,
       tipoAttivitaId: a.tipoAttivitaId,
-      tipoAttivita: a.tipoAttivita.nome,
       personaId: a.personaId,
       stimaOre: Number(a.stimaOre),
       consuntivoOre: a.consuntivoOre === null ? null : Number(a.consuntivoOre),

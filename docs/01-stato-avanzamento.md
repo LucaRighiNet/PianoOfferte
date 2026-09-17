@@ -37,7 +37,7 @@ Riferimento: `docs/00-analisi-e-piano.md`. Aggiornato al 17 settembre 2026.
 | — | Revisione di sicurezza di autenticazione, segreti e rotte | Fatto | Esito in docs/03-esercizio.md par. 3-bis; due difetti trovati e chiusi |
 | S2 | Revisioni offerta | Fatto | Nuova attivita agganciata all'ultima, stessa persona, offerta riportata in revisione; quota di revisioni in dashboard |
 
-Test unitari: 253 su 14 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
+Test unitari: 259 su 15 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
 
 ## Soglie prestazionali, ultima misura
 
@@ -83,6 +83,10 @@ si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
 | Percorso del browser inchiodato a questo ambiente nello script di verifica | Scrittura della CI | Risolto da Playwright quando il percorso non esiste |
 | Lo schema permetteva diramazioni nelle dipendenze che il codice ignorava in silenzio | Domanda del committente sulla teoria dei grafi | Due vincoli di unicita rendono il grafo una unione di cammini semplici. Rifiuto provato dal vivo |
 | Due revisioni aperte nello stesso istante collidevano sul vincolo e davano errore interno | Conseguenza del vincolo appena aggiunto | Tradotto in un conflitto di concorrenza spiegato all'utente |
+| Finestra di dati fissa: seicento attivita trasmesse per mostrarne duecento | Misura del peso della pagina | La finestra segue lo zoom richiesto |
+| Forma e stati di barre e celle ripetuti in un attributo di stile per elemento: 250 KB | Misura della composizione dell'HTML | Passati alle classi; in linea solo posizione, dimensione e colore |
+| Griglia dei giorni disegnata con un elemento per colonna per riga: 819 elementi | Conteggio dei nodi | Diventata uno sfondo a gradienti ripetuti |
+| Nome del tipo attivita ripetuto su ogni attivita, gia presente come tabella sul client | Analisi del carico di idratazione | Rimosso dal carico |
 
 ## Cosa manca
 

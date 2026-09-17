@@ -98,6 +98,34 @@ confermati dal responsabile della protezione dei dati. Il portale non cancella
 nulla da solo: la politica di conservazione va realizzata con un job che il
 committente deve decidere di volere.
 
+## 6-bis. Prestazioni: cosa e stato misurato e ottimizzato
+
+Misure sul seme di prova (520 offerte, 1222 attivita), pagina di pianificazione.
+
+| Livello di zoom | Peso prima | Peso dopo | Variazione |
+|---|---|---|---|
+| Due settimane | 1,27 MB | 394 KB | -69% |
+| Due mesi (predefinito) | 1,27 MB | 859 KB | -32% |
+| Trimestre | 1,27 MB | 1,15 MB | -9% |
+
+Primo caricamento utile: da circa 1050 ms a circa 907 ms. Cambio filtro: da
+circa 60 ms a circa 39 ms. Soglie del par. 7.3 del piano: 1500 e 150 ms.
+
+Dove NON era il costo, contro le attese:
+
+| Sospetto | Misura | Esito |
+|---|---|---|
+| Interrogazioni al database | 1,4 ms di esecuzione | Non e un collo di bottiglia. Nessun indice aggiunto |
+| Griglia dei giorni a elementi | 819 elementi, 180 KB | Reale ma minore: il 14% |
+| Attributi di stile ripetuti | 2263 attributi, 250 KB | Il costo principale dell'HTML |
+| Finestra di dati caricata | 658 attivita per mostrarne 254 | Il costo principale dell'idratazione |
+
+Interventi, in ordine di resa: la finestra caricata segue lo zoom invece di
+essere fissa; forma e stati di barre e celle di carico sono passati alle classi,
+lasciando in linea solo posizione, dimensione e colore; la griglia dei giorni e
+diventata uno sfondo; il nome del tipo di attivita non viaggia piu su ogni
+attivita, perche il client ha gia la tabella per identificativo.
+
 ## 7. Cosa sorvegliare dopo il rilascio
 
 | Segnale | Dove | Perche |
