@@ -1,5 +1,6 @@
 import 'server-only';
 import { db } from '@/lib/db';
+import { Prisma } from '@/generated/prisma';
 import { aDateUtc, aggiungiGiorni, daIstante, type DataCivile } from '@/lib/data/dataCivile';
 import { caricaCalendario } from './pianificazione';
 
@@ -106,9 +107,25 @@ export async function creaRevisione(dati: NuovaRevisione): Promise<RevisioneCrea
       select: { id: true },
     });
 
-    await tx.dipendenza.create({
-      data: { predecessoreId: ultima.id, successoreId: attivita.id },
-    });
+    try {
+      await tx.dipendenza.create({
+        data: { predecessoreId: ultima.id, successoreId: attivita.id },
+      });
+    } catch (errore) {
+      /*
+       * Lo schema ammette un solo successore per attivita. Se due revisioni
+       * vengono aperte nello stesso istante, entrambe calcolano la stessa
+       * ultima attivita e la seconda trova il posto occupato. E' un conflitto
+       * di concorrenza, non un guasto: va detto, non restituito come errore
+       * interno.
+       */
+      if (errore instanceof Prisma.PrismaClientKnownRequestError && errore.code === 'P2002') {
+        throw new RevisioneNonPossibile(
+          'Un altra revisione e stata aperta su questa offerta un istante fa: ricarica e riprova',
+        );
+      }
+      throw errore;
+    }
 
     const revisione = await tx.revisione.create({
       data: {

@@ -220,17 +220,23 @@ model Attivita {
   @@index([dataInizio, dataFine])
 }
 
-// Solo Fine-Inizio: vedi esclusioni par. 5.4 del piano.
+/// Dipendenze Fine-Inizio (par. 5.4 del piano: niente grafo).
+///
+/// I due vincoli di unicita su una colonna sola non sono una rifinitura: sono
+/// l'invariante su cui il codice si appoggia. Con al massimo un successore e un
+/// predecessore per attivita, il grafo delle dipendenze e per costruzione una
+/// unione di cammini semplici, che e esattamente cio che `caricaSuccessori` sa
+/// percorrere. Senza questi vincoli lo schema permetterebbe diramazioni che il
+/// codice ignorerebbe in silenzio.
+///
+/// Restano possibili i cicli (a -> b -> c -> a): li intercetta la visita.
 model Dipendenza {
   id             String @id @default(cuid())
-  predecessoreId String
-  successoreId   String
+  predecessoreId String @unique
+  successoreId   String @unique
 
   predecessore Attivita @relation("Predecessore", fields: [predecessoreId], references: [id], onDelete: Cascade)
   successore   Attivita @relation("Successore", fields: [successoreId], references: [id], onDelete: Cascade)
-
-  @@unique([predecessoreId, successoreId])
-  @@index([successoreId])
 }
 
 model Indisponibilita {

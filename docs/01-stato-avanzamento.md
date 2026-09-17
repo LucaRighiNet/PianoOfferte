@@ -81,6 +81,8 @@ si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
 | Avevo definito la modalita sviluppo "la meno privilegiata": e falso, lascia scegliere qualunque identita a chiunque | Revisione di sicurezza | In produzione e rifiutata, con messaggio che spiega; si riabilita solo con consenso esplicito |
 | Confronto della chiave delle notifiche con uguaglianza semplice | Revisione di sicurezza | Confronto a tempo costante |
 | Percorso del browser inchiodato a questo ambiente nello script di verifica | Scrittura della CI | Risolto da Playwright quando il percorso non esiste |
+| Lo schema permetteva diramazioni nelle dipendenze che il codice ignorava in silenzio | Domanda del committente sulla teoria dei grafi | Due vincoli di unicita rendono il grafo una unione di cammini semplici. Rifiuto provato dal vivo |
+| Due revisioni aperte nello stesso istante collidevano sul vincolo e davano errore interno | Conseguenza del vincolo appena aggiunto | Tradotto in un conflitto di concorrenza spiegato all'utente |
 
 ## Cosa manca
 

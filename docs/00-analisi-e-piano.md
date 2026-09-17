@@ -775,6 +775,7 @@ confermate o corrette quando i dati reali saranno disponibili.
 | 15.2.22 | Una notifica parte solo se c'e qualcosa da fare | Una notifica che arriva tutti i giorni viene archiviata senza leggerla. Chi non ha nulla non riceve nulla |
 | 15.2.23 | Il canale notifiche predefinito scrive nel registro del server | Non e un segnaposto: permette di verificare chi verrebbe disturbato e perche, senza spedire niente a nessuno finche non ci sono le credenziali |
 | 15.2.24 | La rotta del digest resta chiusa senza chiave configurata | Un endpoint che spedisce posta a tutta la divisione non deve essere aperto per dimenticanza |
+| 15.2.25 | Lo schema impone al massimo un successore e un predecessore per attivita | Il par. 5.4 esclude il grafo delle dipendenze, e il codice percorre una catena lineare. Lo schema pero permetteva diramazioni che il codice avrebbe ignorato in silenzio: un'invariante assunta e non imposta. Ora due vincoli di unicita rendono il grafo, per costruzione, una unione di cammini semplici. Non si e costruito uno scheduler su grafo aciclico: si e reso impossibile cio che il codice non gestisce |
 
 ### 15.4 Sul consuntivo ore e l'art. 4
 

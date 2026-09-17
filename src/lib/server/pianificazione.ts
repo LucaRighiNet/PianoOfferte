@@ -133,24 +133,30 @@ export async function caricaCalendario(): Promise<CalendarioLavorativo> {
   return new CalendarioLavorativo(capacita, voci);
 }
 
+/** Oltre questa lunghezza una catena non e un piano: e un dato corrotto. */
+const LUNGHEZZA_MASSIMA_CATENA = 50;
+
 /**
- * Successori diretti e indiretti di una attivita, in ordine di catena.
- * Le dipendenze sono Fine-Inizio e la catena e lineare per costruzione: se
- * incontra una diramazione segue il primo successore per `ordine` e ignora gli
- * altri, che restano dove sono. E' coerente con il par. 5.4: dipendenze
- * semplici, nessun grafo.
+ * Successori di una attivita, in ordine di catena.
+ *
+ * Lo schema garantisce al massimo un successore e un predecessore per
+ * attivita, quindi il grafo delle dipendenze e per costruzione una unione di
+ * cammini semplici e qui basta percorrerne uno. Non servono ordinamento
+ * topologico ne cammino critico: non c'e un grafo su cui calcolarli, ed e la
+ * scelta del par. 5.4 del piano.
+ *
+ * I vincoli di unicita non escludono i cicli (a -> b -> c -> a): li intercetta
+ * l'insieme dei visitati, e il limite di lunghezza e la rete di sicurezza.
  */
 export async function caricaSuccessori(attivitaId: string): Promise<AnelloCatena[]> {
   const catena: AnelloCatena[] = [];
   const visitati = new Set<string>([attivitaId]);
   let corrente = attivitaId;
 
-  // Il limite evita un ciclo infinito se i dati contenessero una dipendenza
-  // circolare, che lo schema da solo non impedisce.
-  for (let passo = 0; passo < 50; passo += 1) {
-    const legami = await db.dipendenza.findMany({
+  for (let passo = 0; passo < LUNGHEZZA_MASSIMA_CATENA; passo += 1) {
+    const legame = await db.dipendenza.findUnique({
       where: { predecessoreId: corrente },
-      include: {
+      select: {
         successore: {
           select: {
             id: true,
@@ -158,18 +164,12 @@ export async function caricaSuccessori(attivitaId: string): Promise<AnelloCatena
             stimaOre: true,
             dataInizio: true,
             dataFine: true,
-            ordine: true,
           },
         },
       },
     });
-    if (legami.length === 0) break;
-
-    const prossimo = legami
-      .map((l) => l.successore)
-      .sort((a, b) => a.ordine - b.ordine)
-      .find((s) => !visitati.has(s.id));
-    if (!prossimo) break;
+    const prossimo = legame?.successore;
+    if (!prossimo || visitati.has(prossimo.id)) break;
 
     visitati.add(prossimo.id);
     catena.push({

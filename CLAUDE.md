@@ -43,6 +43,11 @@ funzionano.
 11. Un colore di stato non porta mai il significato da solo: accanto c'e sempre
     un numero o un'etichetta.
 12. Una funzione vuota e un errore di lint, non una svista.
+13. Le dipendenze formano una unione di cammini semplici, imposta dallo schema:
+    al massimo un successore e un predecessore per attivita. Il codice percorre
+    una catena, non un grafo. Se un giorno servisse un grafo aciclico servono
+    ordinamento topologico e cammino critico, ed e una decisione di prodotto da
+    prendere, non una modifica da fare di passaggio.
 
 ## Come e organizzato
 
@@ -79,3 +84,6 @@ serve un calcolo, va in `src/lib` con il suo test.
   modifiche silenziosamente mancanti.
 - Dopo una modifica all'interfaccia si esegue `verifica:ui`, non uno screenshot:
   gli scatti non distinguono un bug da un database fermo.
+- Un'invariante assunta dal codice e non imposta dallo schema prima o poi viene
+  violata, e il codice fallisce in silenzio. Se il codice assume qualcosa sulla
+  forma dei dati, lo deve garantire il database.
