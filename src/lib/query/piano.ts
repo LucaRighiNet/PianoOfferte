@@ -56,6 +56,11 @@ export interface AttivitaVista {
   readonly versione: number;
 }
 
+export interface DipendenzaVista {
+  readonly predecessoreId: string;
+  readonly successoreId: string;
+}
+
 export interface IndisponibilitaVista {
   readonly id: string;
   readonly personaId: string | null;
@@ -64,6 +69,13 @@ export interface IndisponibilitaVista {
   readonly tipo: string;
   readonly oreGiorno: number | null;
   readonly descrizione: string | null;
+}
+
+export interface TipoOffertaVista {
+  readonly id: string;
+  readonly nome: string;
+  readonly righe: readonly { readonly tipoAttivita: string; readonly stimaOre: number }[];
+  readonly oreTotali: number;
 }
 
 export interface TipoAttivitaVista {
@@ -80,8 +92,10 @@ export interface PianoDati {
   readonly persone: readonly PersonaVista[];
   readonly offerte: readonly OffertaVista[];
   readonly attivita: readonly AttivitaVista[];
+  readonly dipendenze: readonly DipendenzaVista[];
   readonly indisponibilita: readonly IndisponibilitaVista[];
   readonly tipiAttivita: readonly TipoAttivitaVista[];
+  readonly tipiOfferta: readonly TipoOffertaVista[];
   readonly clienti: readonly { readonly id: string; readonly nome: string }[];
 }
 
@@ -102,13 +116,24 @@ export async function caricaPiano(da: DataCivile, a: DataCivile): Promise<PianoD
   const daDate = aDateUtc(da);
   const aDate = aDateUtc(a);
 
-  const [persone, clienti, tipiAttivita, attivita, indisponibilita] = await Promise.all([
+  const [persone, clienti, tipiAttivita, tipiOfferta, attivita, indisponibilita] = await Promise.all(
+    [
     db.persona.findMany({
       where: { attiva: true },
       orderBy: [{ cognome: 'asc' }, { nome: 'asc' }],
     }),
     db.cliente.findMany({ where: { attivo: true }, orderBy: { ragioneSociale: 'asc' } }),
     db.tipoAttivita.findMany({ where: { attivo: true }, orderBy: { ordine: 'asc' } }),
+    db.tipoOfferta.findMany({
+      where: { attivo: true },
+      orderBy: { ordine: 'asc' },
+      include: {
+        righe: {
+          orderBy: { ordine: 'asc' },
+          include: { tipoAttivita: { select: { nome: true } } },
+        },
+      },
+    }),
     // Attivita che intersecano la finestra, piu quelle non pianificate (coda M5).
     db.attivita.findMany({
       where: {
@@ -128,10 +153,11 @@ export async function caricaPiano(da: DataCivile, a: DataCivile): Promise<PianoD
       },
       orderBy: [{ dataInizio: 'asc' }, { ordine: 'asc' }],
     }),
-    db.indisponibilita.findMany({
-      where: { dataInizio: { lte: aDate }, dataFine: { gte: daDate } },
-    }),
-  ]);
+      db.indisponibilita.findMany({
+        where: { dataInizio: { lte: aDate }, dataFine: { gte: daDate } },
+      }),
+    ],
+  );
 
   // Le offerte si ricavano dalle attivita caricate: evita una seconda query e
   // garantisce che ogni riga di gruppo abbia almeno una attivita da mostrare.
@@ -155,6 +181,12 @@ export async function caricaPiano(da: DataCivile, a: DataCivile): Promise<PianoD
       priorita: o.priorita,
     });
   }
+
+  const idAttivita = new Set(attivita.map((a) => a.id));
+  const dipendenze = await db.dipendenza.findMany({
+    where: { predecessoreId: { in: [...idAttivita] } },
+    select: { predecessoreId: true, successoreId: true },
+  });
 
   return {
     finestraDa: da,
@@ -187,6 +219,9 @@ export async function caricaPiano(da: DataCivile, a: DataCivile): Promise<PianoD
       ordine: a.ordine,
       versione: a.versione,
     })),
+    // Solo le dipendenze con entrambi gli estremi nella finestra sono
+    // disegnabili: una freccia verso il nulla confonde piu di quanto informa.
+    dipendenze: dipendenze.filter((d) => idAttivita.has(d.successoreId)),
     indisponibilita: indisponibilita.map((i) => ({
       id: i.id,
       personaId: i.personaId,
@@ -201,6 +236,15 @@ export async function caricaPiano(da: DataCivile, a: DataCivile): Promise<PianoD
       nome: t.nome,
       colore: t.colore,
       stimaDefaultOre: Number(t.stimaDefaultOre),
+    })),
+    tipiOfferta: tipiOfferta.map((t) => ({
+      id: t.id,
+      nome: t.nome,
+      righe: t.righe.map((r) => ({
+        tipoAttivita: r.tipoAttivita.nome,
+        stimaOre: Number(r.stimaOre),
+      })),
+      oreTotali: t.righe.reduce((somma, r) => somma + Number(r.stimaOre), 0),
     })),
     clienti: clienti.map((c) => ({ id: c.id, nome: c.ragioneSociale })),
   };

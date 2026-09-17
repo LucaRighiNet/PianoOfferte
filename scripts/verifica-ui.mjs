@@ -32,7 +32,13 @@ pagina.on('pageerror', (e) => problemi.push(`eccezione in pagina: ${e.message}`)
 // pagina resta visibile ma inerte, e ogni controllo successivo fallisce per il
 // motivo sbagliato. Va riconosciuto per quello che e.
 const risorseNonCaricate = [];
-pagina.on('requestfailed', (r) => risorseNonCaricate.push(`${r.url()} (${r.failure()?.errorText})`));
+pagina.on('requestfailed', (r) => {
+  const motivo = r.failure()?.errorText ?? '';
+  // Un prefetch speculativo annullato dalla navigazione non e un guasto: il
+  // browser lo interrompe di proposito. Tutto il resto conta.
+  if (motivo.includes('ERR_ABORTED')) return;
+  risorseNonCaricate.push(`${r.url()} (${motivo})`);
+});
 pagina.on('response', (r) => {
   if (r.status() >= 400) risorseNonCaricate.push(`${r.url()} -> HTTP ${r.status()}`);
 });
@@ -135,6 +141,106 @@ await pagina.keyboard.press('4');
 await pagina.waitForTimeout(700);
 const salvato = await pagina.locator('[data-prova="salvataggio"]', { hasText: 'Salvato' }).count();
 
+// --- Creazione di una nuova RDO (M8) -------------------------------------
+const codiceProva = `Prova automatica ${Date.now()}`;
+const codaPrima = Number((await pagina.textContent('aside header span')) ?? '0');
+
+await pagina.locator('button', { hasText: '+ Nuova RDO' }).click();
+await pagina.waitForTimeout(300);
+const moduloAperto = await pagina.locator('text=Nuova richiesta di offerta').count();
+
+if (moduloAperto > 0) {
+  await pagina.getByPlaceholder('Quadri elettrici BT').fill(codiceProva);
+  await pagina.getByPlaceholder('Cummins').fill('Cliente Prova Automatica');
+  await pagina.locator('button', { hasText: 'Crea richiesta' }).click();
+  await pagina.waitForTimeout(1500);
+}
+const avvisoCreazione = await pagina.locator('[data-prova="avviso"]').textContent().catch(() => '');
+const codaDopo = Number((await pagina.textContent('aside header span')) ?? '0');
+
+// --- Assegnazione per trascinamento dalla coda (M5) ----------------------
+async function centro(elemento) {
+  const r = await elemento.boundingBox();
+  if (!r) return null;
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+}
+
+const primaVoceCoda = pagina.locator('aside ul li button').first();
+const corsia = pagina.locator('[data-corsia-persona]').first();
+const partenza = await centro(primaVoceCoda);
+const arrivo = await centro(corsia);
+
+let assegnazioneRiuscita = false;
+if (partenza && arrivo) {
+  await pagina.mouse.move(partenza.x, partenza.y);
+  await pagina.mouse.down();
+  await pagina.mouse.move(partenza.x - 40, partenza.y, { steps: 5 });
+  await pagina.mouse.move(arrivo.x, arrivo.y, { steps: 10 });
+  await pagina.mouse.up();
+  await pagina.waitForTimeout(2000);
+  const codaFinale = Number((await pagina.textContent('aside header span')) ?? '0');
+  assegnazioneRiuscita = codaFinale < codaDopo;
+}
+
+// --- Spostamento di una barra (M2) ---------------------------------------
+const barraDaSpostare = pagina.locator('[data-corsia-persona] button[aria-label]').nth(3);
+const posizionePrima = await barraDaSpostare.boundingBox();
+let spostamentoRiuscito = false;
+if (posizionePrima) {
+  const da = { x: posizionePrima.x + posizionePrima.width / 2, y: posizionePrima.y + posizionePrima.height / 2 };
+  await pagina.mouse.move(da.x, da.y);
+  await pagina.mouse.down();
+  await pagina.mouse.move(da.x + 60, da.y, { steps: 8 });
+  await pagina.mouse.up();
+  await pagina.waitForTimeout(2000);
+  const indicatore = await pagina.locator('[data-prova="salvataggio"]').textContent().catch(() => '');
+  spostamentoRiuscito = indicatore === 'Salvato';
+}
+
+await scatta('dopo-trascinamento');
+
+// --- Impostazioni (M4) ----------------------------------------------------
+await pagina.goto('http://localhost:3000/impostazioni', { waitUntil: 'networkidle' });
+const righePersone = await pagina.locator('tbody tr').count();
+
+// Modifica della capacita: si salva alla perdita di fuoco, non a ogni tasto.
+const campoCapacita = pagina.locator('tbody tr').first().locator('input[type="number"]').first();
+const capacitaOriginale = await campoCapacita.inputValue();
+await campoCapacita.fill('5.5');
+await campoCapacita.blur();
+await pagina.waitForTimeout(1200);
+const capacitaSalvata =
+  (await pagina.locator('[role="status"]').textContent().catch(() => '')) === 'Salvato';
+// Ripristino, cosi la verifica non lascia il database alterato.
+await campoCapacita.fill(capacitaOriginale);
+await campoCapacita.blur();
+await pagina.waitForTimeout(800);
+
+// Inserimento e cancellazione di una assenza.
+await pagina.locator('button', { hasText: 'Calendario e assenze' }).click();
+await pagina.waitForTimeout(400);
+const assenzePrima = await pagina.locator('tbody tr').count();
+
+// La voce porta una nota irripetibile, cosi la si ritrova per eliminarla:
+// uno script di verifica che lascia residui in banca dati e esso stesso un
+// difetto, e le esecuzioni ripetute smetterebbero di essere confrontabili.
+const notaProva = `verifica-${Date.now()}`;
+await pagina.locator('form input[type="text"]').last().fill(notaProva);
+await pagina.locator('button', { hasText: 'Aggiungi' }).click();
+await pagina.waitForTimeout(1200);
+const assenzeDopo = await pagina.locator('tbody tr').count();
+
+let assenzaEliminata = false;
+const rigaProva = pagina.locator('tbody tr', { hasText: notaProva });
+if ((await rigaProva.count()) > 0) {
+  await rigaProva.first().locator('button', { hasText: 'Elimina' }).click();
+  await pagina.waitForTimeout(1200);
+  assenzaEliminata =
+    (await pagina.locator('tbody tr', { hasText: notaProva }).count()) === 0 &&
+    (await pagina.locator('tbody tr').count()) === assenzePrima;
+}
+await scatta('impostazioni');
+
 await browser.close();
 
 if (msCaricamento > SOGLIA_CARICAMENTO_MS) {
@@ -153,12 +259,29 @@ if (cliccabili.esaminate > 0 && cliccabili.raggiungibili < cliccabili.esaminate)
 if (dettaglioVisibile === 0) problemi.push('il dettaglio non compare alla selezione di una barra');
 if (salvato === 0) problemi.push('il cambio di stato da tastiera non ha confermato il salvataggio');
 
+if (moduloAperto === 0) problemi.push('il modulo Nuova RDO non si apre');
+else if (codaDopo <= codaPrima) problemi.push('la nuova RDO non e finita nella coda Da assegnare');
+if (!assegnazioneRiuscita) {
+  problemi.push('il trascinamento dalla coda non ha assegnato la richiesta');
+}
+if (!spostamentoRiuscito) problemi.push('lo spostamento di una barra non ha confermato il salvataggio');
+if (righePersone === 0) problemi.push('la schermata Impostazioni non elenca le persone');
+if (!capacitaSalvata) problemi.push('la modifica della capacita non ha confermato il salvataggio');
+if (assenzeDopo <= assenzePrima) problemi.push('l inserimento di una assenza non ha aggiunto righe');
+else if (!assenzaEliminata) problemi.push('l eliminazione di una assenza non ha rimosso la riga');
+
 const esito = {
   msCaricamento,
   msCambioFiltro: Math.round(msFiltro * 10) / 10,
   barreDisegnate: barre,
   barreRaggiungibili: cliccabili,
   bannerTroncamentoVistaOfferta: troncamento > 0,
+  moduloRdoApre: moduloAperto > 0,
+  codaDaAssegnare: { prima: codaPrima, dopoCreazione: codaDopo },
+  avvisoCreazione: (avvisoCreazione ?? '').trim().slice(0, 80),
+  assegnazioneRiuscita,
+  spostamentoRiuscito,
+  impostazioni: { righePersone, capacitaSalvata, assenzePrima, assenzeDopo, assenzaEliminata },
   problemi,
 };
 globalThis.console.log(JSON.stringify(esito, null, 2));

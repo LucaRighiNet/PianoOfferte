@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   aggiungiGiorni,
@@ -47,6 +48,8 @@ import { RigaCapacita } from './RigaCapacita';
 import { BarraAttivita, type DatiBarra } from './BarraAttivita';
 import { CodaDaAssegnare, type VoceCoda } from './CodaDaAssegnare';
 import { Legenda } from './Legenda';
+import { ModuloNuovaRdo } from './ModuloNuovaRdo';
+import { useTrascinamento, type EsitoRilascio, type OrigineGesto } from './useTrascinamento';
 import { Avatar, Chip, GruppoSegmentato, Pulsante, Selettore } from './ui';
 
 const LARGHEZZA_GRIGLIA = 244;
@@ -98,6 +101,8 @@ export function Pianificatore({
   const [statiLocali, setStatiLocali] = useState<
     ReadonlyMap<string, { stato: StatoAttivitaMemorizzato; versione: number }>
   >(new Map());
+  const [mostraNuovaRdo, setMostraNuovaRdo] = useState(false);
+  const [avviso, setAvviso] = useState<string | null>(null);
 
   const contenitore = useRef<HTMLDivElement>(null);
 
@@ -242,16 +247,41 @@ export function Pianificatore({
   const gruppiTroncati = modo !== 'RISORSA' && gruppi.length > MAX_GRUPPI_LEGGIBILI;
   const gruppiVisualizzati = gruppiTroncati ? gruppi.slice(0, MAX_GRUPPI_LEGGIBILI) : gruppi;
 
+  /*
+   * Una riga per OFFERTA, non per attivita. Assegnare la prima attivita assegna
+   * anche i successori liberi alla stessa persona, quindi elencarli tutti
+   * gonfierebbe la coda senza aggiungere decisioni da prendere.
+   */
   const coda: readonly VoceCoda[] = useMemo(() => {
-    return dati.attivita
-      .filter((a) => a.personaId === null || a.dataInizio === null)
-      .flatMap((a) => {
-        const o = offerteMappa.get(a.offertaId);
-        if (!o) return [];
-        if (filtroCliente !== '' && o.clienteId !== filtroCliente) return [];
-        if (filtroKam !== '' && o.kamId !== filtroKam) return [];
-        return [{ attivitaId: a.id, etichetta: a.tipoAttivita, stimaOre: a.stimaOre, offerta: o }];
+    const perOfferta = new Map<string, AttivitaVista[]>();
+    for (const a of dati.attivita) {
+      if (a.personaId !== null && a.dataInizio !== null) continue;
+      const elenco = perOfferta.get(a.offertaId);
+      if (elenco) elenco.push(a);
+      else perOfferta.set(a.offertaId, [a]);
+    }
+
+    const voci: VoceCoda[] = [];
+    for (const [offertaId, attivita] of perOfferta) {
+      const o = offerteMappa.get(offertaId);
+      if (!o) continue;
+      if (filtroCliente !== '' && o.clienteId !== filtroCliente) continue;
+      if (filtroKam !== '' && o.kamId !== filtroKam) continue;
+
+      const ordinate = [...attivita].sort((x, y) => x.ordine - y.ordine);
+      const prima = ordinate[0];
+      if (!prima) continue;
+
+      voci.push({
+        attivitaId: prima.id,
+        etichetta: prima.tipoAttivita,
+        stimaOre: ordinate.reduce((somma, a) => somma + a.stimaOre, 0),
+        versione: prima.versione,
+        attivitaInCatena: ordinate.length,
+        offerta: o,
       });
+    }
+    return voci;
   }, [dati.attivita, offerteMappa, filtroCliente, filtroKam]);
 
   const attivitaSelezionata = useMemo(() => {
@@ -309,10 +339,81 @@ export function Pianificatore({
     [],
   );
 
+  const applicaRilascio = useCallback(
+    async ({ origine, bersaglio }: EsitoRilascio) => {
+      if (bersaglio.personaId === null || bersaglio.giorno === null) return;
+
+      const corpo: Record<string, unknown> = { versione: origine.versione };
+      if (origine.tipo === 'RIDIMENSIONA') {
+        corpo.dataFine = bersaglio.giorno;
+      } else {
+        corpo.personaId = bersaglio.personaId;
+        corpo.dataInizio = bersaglio.giorno;
+      }
+
+      setSalvataggio({ tipo: 'IN_CORSO' });
+      try {
+        const risposta = await fetch(`/api/attivita/${origine.attivitaId}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(corpo),
+        });
+
+        if (!risposta.ok) {
+          const dettaglio = (await risposta.json().catch(() => null)) as
+            | { errore?: string; problemi?: { motivo: string }[] }
+            | null;
+          const messaggio =
+            risposta.status === 409
+              ? 'Modificata da un altro utente: la vista si sta aggiornando'
+              : (dettaglio?.problemi?.[0]?.motivo ?? dettaglio?.errore ?? 'Operazione non riuscita');
+          setSalvataggio({ tipo: 'ERRORE', messaggio });
+          setAvviso(messaggio);
+          router.refresh();
+          return;
+        }
+
+        const esito = (await risposta.json()) as {
+          aggiornate: { id: string }[];
+          problemi: { motivo: string }[];
+        };
+        setSalvataggio({ tipo: 'SALVATO' });
+        setAvviso(
+          esito.problemi.length > 0
+            ? `Catena interrotta: ${esito.problemi[0]?.motivo ?? ''}`
+            : esito.aggiornate.length > 1
+              ? `Riprogrammate ${esito.aggiornate.length} attivita della catena`
+              : null,
+        );
+        router.refresh();
+      } catch {
+        setSalvataggio({ tipo: 'ERRORE', messaggio: 'Rete non raggiungibile' });
+        setAvviso('Rete non raggiungibile: la modifica non e stata salvata');
+      }
+    },
+    [router],
+  );
+
+  const { stato: trascinamento, inizia: iniziaTrascinamento } = useTrascinamento({
+    larghezzaGiorno: definizione.larghezzaGiorno,
+    finestraDa,
+    onRilascio: (esito) => void applicaRilascio(esito),
+  });
+
+  const iniziaGesto = useCallback(
+    (origine: OrigineGesto, evento: React.PointerEvent) => iniziaTrascinamento(origine, evento),
+    [iniziaTrascinamento],
+  );
+
   // Tasti rapidi 1-4 sull'attivita selezionata: M7, avanzamento a un click.
   useEffect(() => {
     function suTasto(e: KeyboardEvent): void {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        setMostraNuovaRdo(true);
+        return;
+      }
       if (attivitaSelezionata === null) return;
       const mappa: Readonly<Record<string, StatoAttivitaMemorizzato>> = {
         '1': 'NON_INIZIATA',
@@ -355,6 +456,18 @@ export function Pianificatore({
         className="flex flex-wrap items-center gap-2 border-b px-3 py-2"
         style={{ borderColor: 'var(--bordo)', background: 'var(--sfondo-pannello)' }}
       >
+        <button
+          type="button"
+          onClick={() => setMostraNuovaRdo(true)}
+          title="Nuova richiesta di offerta (tasto N)"
+          className="inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-[12px] font-medium"
+          style={{ background: 'var(--accento)', borderColor: 'var(--accento)', color: '#fff' }}
+        >
+          + Nuova RDO
+        </button>
+
+        <span className="mx-1 h-5 w-px" style={{ background: 'var(--bordo)' }} />
+
         <Pulsante
           onClick={() => setAncora(aggiungiGiorni(ancora, -definizione.giorniVisibili))}
           titolo="Periodo precedente"
@@ -496,9 +609,12 @@ export function Pianificatore({
                       gruppo.personaId !== null ? allocazione.get(gruppo.personaId) : undefined
                     }
                     offerteMappa={offerteMappa}
+                    dipendenze={dati.dipendenze}
                     oggi={dati.oggi}
                     selezionata={selezionata}
+                    idInMovimento={trascinamento?.origine.attivitaId ?? null}
                     onSeleziona={setSelezionata}
+                    onIniziaGesto={iniziaGesto}
                   />
                 ))
               )}
@@ -522,9 +638,82 @@ export function Pianificatore({
           voci={coda}
           oggi={dati.oggi}
           selezionata={selezionata}
+          inMovimento={trascinamento?.origine.attivitaId ?? null}
           onSeleziona={setSelezionata}
+          onIniziaAssegnazione={(voce, evento) =>
+            iniziaGesto(
+              {
+                tipo: 'ASSEGNA',
+                attivitaId: voce.attivitaId,
+                versione: voce.versione,
+                dataInizio: null,
+                stimaOre: voce.stimaOre,
+                etichetta: `${voce.offerta.descrizione} · ${voce.etichetta}`,
+              },
+              evento,
+            )
+          }
         />
       </div>
+
+      {avviso ? (
+        <div
+          role="status"
+          data-prova="avviso"
+          className="flex items-center gap-2 border-t px-4 py-1.5 text-[12px]"
+          style={{
+            borderColor: 'var(--bordo)',
+            background: 'var(--sfondo-tenue)',
+            color: 'var(--testo-tenue)',
+          }}
+        >
+          {avviso}
+          <button
+            type="button"
+            onClick={() => setAvviso(null)}
+            className="ml-auto text-[12px]"
+            style={{ color: 'var(--testo-debole)' }}
+          >
+            ✕
+          </button>
+        </div>
+      ) : null}
+
+      {trascinamento?.attivo ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed z-[90] rounded-[4px] px-2 py-1 text-[11px]"
+          style={{
+            left: trascinamento.x + 12,
+            top: trascinamento.y + 12,
+            background: 'var(--testo)',
+            color: 'var(--sfondo-pannello)',
+            boxShadow: 'var(--ombra-pannello)',
+            maxWidth: 320,
+          }}
+        >
+          {trascinamento.origine.tipo === 'RIDIMENSIONA'
+            ? `Durata fino al ${trascinamento.bersaglio.giorno ?? '—'}`
+            : trascinamento.bersaglio.personaId === null
+              ? 'Rilascia su una corsia risorsa'
+              : `${trascinamento.origine.etichetta} → ${
+                  dati.persone.find((p) => p.id === trascinamento.bersaglio.personaId)?.cognome ??
+                  ''
+                } dal ${trascinamento.bersaglio.giorno ?? '—'}`}
+        </div>
+      ) : null}
+
+      {mostraNuovaRdo ? (
+        <ModuloNuovaRdo
+          dati={dati}
+          onChiudi={() => setMostraNuovaRdo(false)}
+          onCreata={(codice) => {
+            setMostraNuovaRdo(false);
+            setAvviso(`Richiesta ${codice} creata: ora e nella coda Da assegnare`);
+            router.refresh();
+          }}
+        />
+      ) : null}
 
       {attivitaSelezionata ? (
         <DettaglioSelezione
@@ -570,6 +759,17 @@ function Intestazione({
 
       <div className="ml-auto flex items-center gap-3">
         <IndicatoreSalvataggio stato={salvataggio} />
+        <Link
+          href="/impostazioni"
+          className="inline-flex h-7 items-center rounded-md border px-2.5 text-[12px] font-medium"
+          style={{
+            background: 'var(--sfondo-pannello)',
+            borderColor: 'var(--bordo)',
+            color: 'var(--testo)',
+          }}
+        >
+          Impostazioni
+        </Link>
         <Pulsante onClick={onCambiaTema} titolo="Cambia tema">
           {tema === 'scuro' ? '☀' : '☾'}
         </Pulsante>
@@ -616,9 +816,12 @@ function RigaGruppo({
   coloriTipo,
   allocazione,
   offerteMappa,
+  dipendenze,
   oggi,
   selezionata,
+  idInMovimento,
   onSeleziona,
+  onIniziaGesto,
 }: {
   gruppo: ReturnType<typeof costruisciGruppi>[number];
   giorni: readonly GiornoVista[];
@@ -629,9 +832,12 @@ function RigaGruppo({
   coloriTipo: ReadonlyMap<string, string>;
   allocazione: ReadonlyMap<DataCivile, number> | undefined;
   offerteMappa: ReadonlyMap<string, PianoDati['offerte'][number]>;
+  dipendenze: readonly PianoDati['dipendenze'][number][];
   oggi: DataCivile;
   selezionata: string | null;
+  idInMovimento: string | null;
   onSeleziona: (id: string) => void;
+  onIniziaGesto: (origine: OrigineGesto, evento: React.PointerEvent) => void;
 }) {
   const visibili = useMemo(
     () =>
@@ -664,6 +870,41 @@ function RigaGruppo({
   }, [gruppo.personaId, calendario, finestraDa, finestraA, allocazione]);
 
   const riepilogo = useMemo(() => (carico ? aggregaCarico(carico) : null), [carico]);
+
+  /**
+   * Collegamenti Fine-Inizio disegnabili: entrambi gli estremi devono stare in
+   * questo gruppo e nella finestra. Si disegnano dopo l'impilamento perche la
+   * corsia di arrivo e nota solo allora.
+   */
+  const collegamenti = useMemo(() => {
+    const posizioni = new Map<string, { corsia: number; inizio: DataCivile; fine: DataCivile }>();
+    for (const { elemento, corsia } of impilate.elementi) {
+      posizioni.set(elemento.id, { corsia, inizio: elemento.inizio, fine: elemento.fine });
+    }
+    const tracciati: {
+      chiave: string;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+    }[] = [];
+    for (const d of dipendenze) {
+      const da = posizioni.get(d.predecessoreId);
+      const a = posizioni.get(d.successoreId);
+      if (!da || !a) continue;
+      const colonnaFine = colonnaDelGiorno(finestraDa, finestraA, da.fine);
+      const colonnaInizio = colonnaDelGiorno(finestraDa, finestraA, a.inizio);
+      if (colonnaFine === null || colonnaInizio === null) continue;
+      tracciati.push({
+        chiave: `${d.predecessoreId}-${d.successoreId}`,
+        x1: (colonnaFine + 1) * larghezzaGiorno - 1,
+        y1: da.corsia * ALTEZZA_CORSIA + ALTEZZA_CORSIA / 2,
+        x2: colonnaInizio * larghezzaGiorno + 1,
+        y2: a.corsia * ALTEZZA_CORSIA + ALTEZZA_CORSIA / 2,
+      });
+    }
+    return tracciati;
+  }, [impilate.elementi, dipendenze, finestraDa, finestraA, larghezzaGiorno]);
 
   const numeroCorsie = Math.max(1, impilate.corsie);
   const altezzaTotale = (carico ? ALTEZZA_CAPACITA : 0) + numeroCorsie * ALTEZZA_CORSIA;
@@ -746,7 +987,29 @@ function RigaGruppo({
           />
         ) : null}
 
-        <div className="relative" style={{ height: numeroCorsie * ALTEZZA_CORSIA }}>
+        <div
+          className="relative"
+          style={{ height: numeroCorsie * ALTEZZA_CORSIA }}
+          data-corsia-persona={gruppo.personaId ?? undefined}
+        >
+          {collegamenti.length > 0 ? (
+            <svg
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              style={{ overflow: 'visible' }}
+            >
+              {collegamenti.map((c) => (
+                <path
+                  key={c.chiave}
+                  d={`M ${c.x1} ${c.y1} C ${c.x1 + 14} ${c.y1}, ${c.x2 - 14} ${c.y2}, ${c.x2} ${c.y2}`}
+                  fill="none"
+                  stroke="var(--testo-debole)"
+                  strokeWidth={1}
+                  opacity={0.55}
+                />
+              ))}
+            </svg>
+          ) : null}
           {impilate.elementi.map(({ elemento, corsia }) => {
             const a = elemento.attivita;
             const inizio = a.dataInizio as DataCivile;
@@ -799,7 +1062,34 @@ function RigaGruppo({
                 altezza={ALTEZZA_BARRA}
                 alto={corsia * ALTEZZA_CORSIA + (ALTEZZA_CORSIA - ALTEZZA_BARRA) / 2}
                 selezionata={selezionata === a.id}
+                inMovimento={idInMovimento === a.id}
                 onSeleziona={onSeleziona}
+                onIniziaSpostamento={(evento) =>
+                  onIniziaGesto(
+                    {
+                      tipo: 'SPOSTA',
+                      attivitaId: a.id,
+                      versione: a.versione,
+                      dataInizio: inizio,
+                      stimaOre: a.stimaOre,
+                      etichetta: `${offerta?.descrizione ?? ''} · ${a.tipoAttivita}`,
+                    },
+                    evento,
+                  )
+                }
+                onIniziaRidimensionamento={(evento) =>
+                  onIniziaGesto(
+                    {
+                      tipo: 'RIDIMENSIONA',
+                      attivitaId: a.id,
+                      versione: a.versione,
+                      dataInizio: inizio,
+                      stimaOre: a.stimaOre,
+                      etichetta: `${offerta?.descrizione ?? ''} · ${a.tipoAttivita}`,
+                    },
+                    evento,
+                  )
+                }
               />
             );
           })}

@@ -727,3 +727,43 @@ impilamento corsie) e con una lista di controllo manuale dove e interfaccia.
 Le esclusioni del paragrafo 5.4 restano valide dopo la rilettura. La selezione Must e Should non
 cambia. Cambiano il modello dati (versione, regola durata), il processo di rilascio (informativa
 art. 4), e la strategia di prova (seed realistico).
+
+---
+
+## 15. Decisioni prese in autonomia (rev. 4)
+
+Il committente ha dato mandato di procedere decidendo. Queste sono le decisioni
+che ho preso al posto suo, con il motivo. Sono tutte reversibili e vanno
+confermate o corrette quando i dati reali saranno disponibili.
+
+### 15.1 Decisioni che erano aperte
+
+| # | Decisione presa | Motivo | Come si cambia |
+|---|---|---|---|
+| D4 | Possono creare una RDO responsabile e KAM | Con circa 3 richieste al giorno, concentrarle su una sola persona la rende il collo di bottiglia del sistema che dovrebbe toglierlo (rischio R3) | Ruoli, quando arriva l'autenticazione |
+| D5 | Autenticazione rinviata, dietro una cucitura | Non esiste un tenant su cui provarla. Il codice non presuppone utenti locali: l'identita e gia un campo separato nell'audit | Si aggiunge il provider, non si riscrive |
+| D6 | Nessuna scelta di hosting | Non e una decisione tecnica ma aziendale, e riguarda dati commerciali | Resta al committente e all'IT |
+| D8 | Cinque tipi di offerta con i loro template | Servivano per far esistere M8. Sono ipotesi ricavate dallo screenshot, non dati reali | Sezione Impostazioni, Tipi e stime |
+| D9 | La capacita e "ore al giorno dedicate alle offerte", modificabile per persona | Un tecnico che fa offerte mezza giornata non ha 8 ore di capacita. Usare l'orario contrattuale renderebbe la heatmap sistematicamente ottimistica | Impostazioni, Persone e capacita |
+| D10 | Il carico non-offerta si rappresenta come indisponibilita ricorrente a ore | Non serve un modello separato: sottrarre ore alla capacita e esattamente cio che serve, e si vede nella heatmap come qualunque altra assenza | Impostazioni, Calendario e assenze |
+
+### 15.2 Decisioni di prodotto emerse costruendo
+
+| # | Decisione | Motivo |
+|---|---|---|
+| 15.2.1 | Assegnare una attivita assegna anche i suoi successori ancora liberi, alla stessa persona | Senza questa regola una richiesta con quattro attivita richiedeva quattro trascinamenti. Nel processo offerta la sequenza la svolge quasi sempre la stessa persona. Riassegnare un singolo anello resta possibile trascinandolo altrove |
+| 15.2.2 | La coda "Da assegnare" mostra una riga per offerta, non per attivita | Conseguenza della precedente: elencare attivita che verranno assegnate insieme gonfia la coda senza aggiungere decisioni |
+| 15.2.3 | Lo scorrimento della catena conserva il margine esistente fra le attivita | Se fra analisi e sviluppo c'erano due giorni di stacco, dopo lo spostamento ce ne sono ancora due. Il pianificatore ritrova la forma che aveva costruito |
+| 15.2.4 | Il ridimensionamento di una barra invia la nuova data di fine, non le ore | Il client non conosce il calendario della persona: indovinare otto ore al giorno sarebbe sbagliato per chi ne fa quattro. Le ore le ricava il server dalla capacita reale |
+| 15.2.5 | Le date non arrivano mai dal client | Il client dichiara l'intenzione (chi, da quando), il server calcola. Altrimenti due browser con dati di calendario diversi produrrebbero piani diversi |
+| 15.2.6 | Il controllo di concorrenza e sulla sola radice della catena | I successori sono conseguenza della modifica, non modifiche indipendenti. Le loro versioni vengono comunque incrementate, cosi chi li stia modificando riceve un conflitto |
+| 15.2.7 | I template dei tipi di offerta sono in sola lettura in Impostazioni | Cambiare quali attivita nascono da una richiesta e una decisione di processo, non una regolazione da fare al volo fra due telefonate |
+| 15.2.8 | La saturazione considera tutto il lavoro pianificato, non solo quello filtrato | Nascondere meta del carico renderebbe la heatmap una bugia |
+
+### 15.3 Cosa resta scoperto e va deciso dal committente
+
+1. I numeri reali di D8, D9 e D10: tipi di offerta effettivi, ore davvero
+   dedicate alle offerte, carico non-offerta per persona. Lo strumento li
+   accetta gia; senza i valori veri la heatmap e plausibile ma non vera.
+2. Hosting e autenticazione (D5, D6).
+3. Informativa e regolamento art. 4 (par. 14.1), prerequisito di rilascio.

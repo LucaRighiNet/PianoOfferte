@@ -18,6 +18,9 @@ export interface VoceCoda {
   readonly attivitaId: string;
   readonly etichetta: string;
   readonly stimaOre: number;
+  readonly versione: number;
+  /** Quante attivita verranno assegnate insieme trascinando questa voce. */
+  readonly attivitaInCatena: number;
   readonly offerta: OffertaVista;
 }
 
@@ -32,12 +35,16 @@ export function CodaDaAssegnare({
   voci,
   oggi,
   selezionata,
+  inMovimento,
   onSeleziona,
+  onIniziaAssegnazione,
 }: {
   voci: readonly VoceCoda[];
   oggi: DataCivile;
   selezionata: string | null;
+  inMovimento: string | null;
   onSeleziona: (id: string) => void;
+  onIniziaAssegnazione: (voce: VoceCoda, evento: React.PointerEvent) => void;
 }) {
   const ordinate = [...voci].sort((a, b) => {
     const sa = a.offerta.dataScadenzaCliente;
@@ -57,7 +64,12 @@ export function CodaDaAssegnare({
         className="sticky top-0 flex items-baseline justify-between border-b px-3 py-2"
         style={{ borderColor: 'var(--bordo)', background: 'var(--sfondo-pannello)' }}
       >
-        <h2 className="text-[12px] font-semibold">Da assegnare</h2>
+        <div>
+          <h2 className="text-[12px] font-semibold">Da assegnare</h2>
+          <p className="text-[10px]" style={{ color: 'var(--testo-debole)' }}>
+            Trascina su una risorsa: si assegna tutta la catena
+          </p>
+        </div>
         <span className="text-[11px]" style={{ color: 'var(--testo-debole)' }}>
           {ordinate.length}
         </span>
@@ -77,11 +89,15 @@ export function CodaDaAssegnare({
                   <button
                     type="button"
                     onClick={() => onSeleziona(v.attivitaId)}
+                    onPointerDown={(e) => onIniziaAssegnazione(v, e)}
                     className="w-full border-b px-3 py-2 text-left transition-colors"
                     style={{
                       borderColor: 'var(--bordo)',
                       background:
                         selezionata === v.attivitaId ? 'var(--sfondo-hover)' : 'transparent',
+                      opacity: inMovimento === v.attivitaId ? 0.35 : 1,
+                      cursor: 'grab',
+                      touchAction: 'none',
                     }}
                   >
                     <div className="flex items-start gap-1.5">
@@ -109,7 +125,9 @@ export function CodaDaAssegnare({
                       style={{ color: 'var(--testo-tenue)' }}
                     >
                       <span>
-                        {v.etichetta} · {formatoOre(v.stimaOre)}
+                        {v.attivitaInCatena > 1
+                          ? `${v.attivitaInCatena} attivita · ${formatoOre(v.stimaOre)}`
+                          : `${v.etichetta} · ${formatoOre(v.stimaOre)}`}
                       </span>
                       <span
                         title={ETICHETTE_SEMAFORO[margine.semaforo]}

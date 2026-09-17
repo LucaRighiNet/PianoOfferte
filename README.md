@@ -36,6 +36,10 @@ L'applicazione risponde su http://localhost:3000/pianificazione
 | `npm run db:seed` | Rigenera i dati di prova |
 | `npm run db:studio` | Ispezione del database |
 
+La verifica end-to-end SCRIVE sul database: crea una richiesta di offerta, la
+assegna, sposta una barra. Va eseguita solo su un database di sviluppo. Per
+tornare a uno stato noto: `npm run db:seed`.
+
 ## Come e fatto
 
 ```

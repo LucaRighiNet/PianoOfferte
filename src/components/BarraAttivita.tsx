@@ -64,7 +64,10 @@ export const BarraAttivita = memo(function BarraAttivita({
   altezza,
   alto,
   selezionata,
+  inMovimento = false,
   onSeleziona,
+  onIniziaSpostamento,
+  onIniziaRidimensionamento,
 }: {
   dati: DatiBarra;
   collocazione: Collocazione;
@@ -73,7 +76,11 @@ export const BarraAttivita = memo(function BarraAttivita({
   /** Distanza dal bordo superiore della zona corsie, in pixel. */
   alto: number;
   selezionata: boolean;
+  /** La barra e quella che si sta trascinando: si attenua per non confondere. */
+  inMovimento?: boolean;
   onSeleziona: (id: string) => void;
+  onIniziaSpostamento?: (evento: React.PointerEvent) => void;
+  onIniziaRidimensionamento?: (evento: React.PointerEvent) => void;
 }) {
   const aRischio = dati.semaforo === 'ROSSO' || dati.semaforo === 'SFORATA';
 
@@ -95,6 +102,7 @@ export const BarraAttivita = memo(function BarraAttivita({
     <button
       type="button"
       onClick={() => onSeleziona(dati.id)}
+      onPointerDown={onIniziaSpostamento}
       title={titolo}
       aria-label={titolo.replace(/\n/g, '. ')}
       className="absolute flex items-center overflow-hidden rounded-[4px] text-left text-[11px] leading-none outline-none focus-visible:ring-2"
@@ -104,7 +112,9 @@ export const BarraAttivita = memo(function BarraAttivita({
         width: larghezza,
         height: altezza,
         background: dati.coloreTipo,
-        opacity: opacitaDi(dati.stato),
+        opacity: inMovimento ? 0.3 : opacitaDi(dati.stato),
+        cursor: onIniziaSpostamento ? 'grab' : 'pointer',
+        touchAction: 'none',
         color: '#fff',
         border: bordoDi(dati.stato),
         boxShadow: selezionata ? '0 0 0 2px var(--oggi)' : 'none',
@@ -150,6 +160,21 @@ export const BarraAttivita = memo(function BarraAttivita({
       ) : null}
 
       {larghezza >= 52 ? <span className="relative truncate">{dati.etichetta}</span> : null}
+
+      {/* Maniglia di ridimensionamento sul bordo destro. Si mostra solo se la
+          barra e abbastanza larga da non rendere impossibile afferrare il corpo. */}
+      {onIniziaRidimensionamento && !collocazione.tagliataFine && larghezza >= 24 ? (
+        <span
+          role="presentation"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            onIniziaRidimensionamento(e);
+          }}
+          className="absolute top-0 right-0 bottom-0"
+          style={{ width: 7, cursor: 'ew-resize', touchAction: 'none' }}
+          title="Trascina per cambiare la durata"
+        />
+      ) : null}
     </button>
   );
 });

@@ -2,77 +2,77 @@
 
 Riferimento: `docs/00-analisi-e-piano.md`. Aggiornato al 17 settembre 2026.
 
-## Cosa e fatto e verificato
+## Taglio 1: completato nelle sue funzioni previste
 
-| ID piano | Funzione | Stato | Come e verificato |
+| ID piano | Funzione | Stato | Verifica |
 |---|---|---|---|
-| — | Impianto progetto: Next 15, TypeScript strict, Prisma, PostgreSQL, Vitest | Fatto | `npm run check` e `npm run build` |
-| — | Lint che tratta una funzione vuota come errore | Fatto | `@typescript-eslint/no-empty-function: error` |
-| — | Modello dati completo secondo i cap. 6 e 14 | Fatto | Schema applicato, seed funzionante |
-| 14.6 | Dati di prova a volume realistico: 780 offerte, 1883 attivita, 12 persone | Fatto | `npm run db:seed` |
-| 14.7 | Date civili senza ora, immuni a fuso e ora legale, settimane ISO | Fatto | 21 test, inclusi i cambi di ora legale 2026 |
-| 14.4 | Durata in ore espansa sui giorni lavorativi, con ferie e chiusure | Fatto | 30 test, incluso lo scavalco di una settimana di ferie |
-| M1 | Stima ore con preset per tipo attivita | Fatto (dati) | Template per tipo offerta nel seed |
-| M2 | Vista per risorsa con impilamento corsie e heatmap di capacita | Fatto | 13 test sull'impilamento, ottimale su 200 insiemi casuali |
-| M2 | Fasce di carico e saturazione | Fatto | 19 test |
-| M3 | Scadenza cliente, margine in giorni lavorativi, semaforo | Fatto | 22 test; visibile su barra e dettaglio |
-| M5 | Coda "Da assegnare" | Fatto (lettura) | Pannello laterale, 104 voci nel seed |
+| M1 | Stima ore con preset per tipo attivita | Fatto | Template applicati alla creazione; stime modificabili in Impostazioni |
+| M2 | Vista per risorsa con impilamento e heatmap di capacita | Fatto | 13 test sull'impilamento, ottimale su 200 insiemi casuali |
+| M2 | Spostamento e ridimensionamento delle barre | Fatto | Verifica end-to-end: trascinamento con conferma di salvataggio |
+| M3 | Scadenza cliente, margine in giorni lavorativi, semaforo | Fatto | 22 test; visibile su barra, coda e dettaglio |
+| M4 | Calendario indisponibilita gestibile da interfaccia | Fatto | Impostazioni: inserimento ed eliminazione verificati |
+| M5 | Coda "Da assegnare" con assegnazione per trascinamento | Fatto | Verifica end-to-end: la coda cala dopo il rilascio |
 | M6 | Stato "Bloccata" con causale a scelta chiusa | Fatto | Validato anche lato API |
-| M7 | Avanzamento a un click, con tasti rapidi 1-4 | Fatto | Verifica end-to-end |
-| S6 | Viste per offerta, cliente, KAM con protezione di volume | Fatto | Banner oltre 40 gruppi |
+| M7 | Avanzamento a un click, tasti rapidi 1-4 | Fatto | Verifica end-to-end |
+| M8 | Inserimento RDO sotto i 30 secondi con template | Fatto | Cinque campi, tre precompilati, anteprima delle attivita generate |
+| M9 | Ricalcolo della catena di dipendenze e disegno dei collegamenti | Fatto | 11 test sulla riprogrammazione |
+| S6 | Viste per offerta, cliente, KAM con protezione di volume | Fatto | Avviso oltre 40 gruppi |
 | 14.2 | Controllo di concorrenza ottimistico | Fatto | 409 con stato attuale, rollback lato client |
-| 14.3 | Stato "In ritardo" derivato, mai memorizzato | Fatto | 22 test |
-| 14.8 | Autosave con tre stati espliciti e rollback visibile | Fatto | Indicatore Salvato / In corso / Non salvato |
-| 2.3 | Tema chiaro e scuro con token | Fatto | Verifica end-to-end |
-| 7.3 | Soglie prestazionali misurate | Fatto | `npm run verifica:ui` |
-| — | Legenda dei colori | Fatto | Aggiunta dopo revisione visiva |
+| 14.3 | Stato "In ritardo" derivato | Fatto | 22 test |
+| 14.4 | Durata in ore espansa sui giorni lavorativi | Fatto | 30 test |
+| 14.6 | Dati di prova a volume realistico | Fatto | 780 offerte, 1883 attivita, 1103 dipendenze |
+| 14.7 | Date civili immuni a fuso e ora legale | Fatto | 21 test |
+| 14.8 | Autosave con tre stati e rollback visibile | Fatto | Indicatore Salvato / In corso / Non salvato |
 
-Test unitari: 146. Typecheck, lint e build puliti.
+Test unitari: 157 su 9 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
 
-## Decisioni di progetto prese durante lo sviluppo
+## Soglie prestazionali, ultima misura
 
-1. Il colore delle barre codifica il TIPO di attivita, non l'identita
-   dell'offerta. Con 30-100 offerte al mese un colore per offerta produce
-   decine di tinte simultanee non decodificabili. L'identita dell'offerta resta
-   in un filetto laterale, nel tooltip e nel dettaglio.
-2. La heatmap di capacita vive in una traccia incassata con tratteggio per i
-   giorni chiusi: senza contrasto un giorno libero e un giorno chiuso si
-   leggevano uguali.
-3. Le viste diverse da "per risorsa" si fermano a 40 gruppi con un avviso, come
-   previsto dal par. 1.2: con 485 gruppi la vista non e utilizzabile.
-4. La saturazione considera tutto il lavoro pianificato, non solo quello
-   filtrato: nascondere meta del carico renderebbe la heatmap una bugia.
+| Metrica | Soglia | Esito |
+|---|---|---|
+| Primo caricamento utile | sotto 1500 ms | circa 1230-1480 ms |
+| Cambio filtro o raggruppamento | sotto 150 ms | circa 50 ms |
+| Barre visibili raggiungibili al click | 100% | 101 su 101 |
 
-## Difetti trovati e corretti in corso d'opera
+Il caricamento e vicino alla soglia: con 900 attivita nella finestra il margine
+si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
+
+## Difetti trovati e corretti
 
 | Difetto | Come e stato trovato | Correzione |
 |---|---|---|
-| Barre della stessa corsia non cliccabili: il contenitore a tutta riga copriva quelle precedenti | Verifica end-to-end | Rimosso il contenitore, posizione verticale passata alla barra |
-| Test sul calendario che perdeva 2 ore su 12 in presenza di assenza parziale | Esecuzione test | Corretta l'aspettativa: il codice era giusto |
-| Tratteggio dei giorni non lavorativi sfalsato di 1 px | Revisione del codice | Scostamento della barra sottratto esplicitamente |
+| Barre della stessa corsia non cliccabili: il contenitore a tutta riga copriva le precedenti | Verifica end-to-end | Rimosso il contenitore |
+| Test sul calendario che perdeva 2 ore su 12 con assenza parziale | Esecuzione test | Corretta l'aspettativa: il codice era giusto |
+| Tratteggio dei giorni non lavorativi sfalsato di 1 px | Revisione del codice | Scostamento sottratto esplicitamente |
 | Dichiarazione CSS malformata nei token del tema scuro | Rilettura | Rimossa |
-| Prova di raggiungibilita che segnalava come coperte barre semplicemente fuori viewport | Analisi del falso positivo | Il controllo esamina solo le barre dentro l'area visibile |
+| Colore per offerta illeggibile a volume | Ispezione del rendering | Il colore codifica il tipo di attivita; l'offerta resta nel filetto |
+| Striscia di capacita indistinguibile da una riga di barre | Ispezione del rendering | Traccia incassata con tratteggio sui giorni chiusi |
 | Fallimento di idratazione mascherato da "il dettaglio non compare" | Analisi della causa | Lo script rileva le risorse non caricate e prova l'interattivita in modo diretto |
+| Logica di riprogrammazione duplicata in due percorsi | Rilettura prima dei test | Riscritta con una sola implementazione |
+| Stima del ridimensionamento calcolata con 8 ore fisse | Revisione del codice | Il client invia la data di fine, il server ricava le ore dal calendario reale |
+| Lo script di verifica lasciava righe residue in banca dati | Ispezione dello screenshot di Impostazioni | La voce di prova porta una nota irripetibile e viene eliminata per quella |
+| Campi di testo senza `type` esplicito, non selezionabili dai test | Fallimento della verifica | `type="text"` esplicito |
 
-## Cosa manca del Taglio 1
+## Cosa manca
 
-| ID | Funzione | Nota |
-|---|---|---|
-| M8 | Inserimento RDO sotto i 30 secondi con template | I dati e i template esistono, manca il form |
-| M5 | Assegnazione per trascinamento dalla coda alla timeline | La coda mostra, non assegna |
-| M2 | Trascinamento e ridimensionamento delle barre | La timeline e in sola lettura salvo il cambio di stato |
-| M4 | Gestione delle indisponibilita da interfaccia | I dati esistono, manca la schermata Impostazioni |
-| M9 | Ricalcolo della catena di dipendenze | Le dipendenze sono nel modello, non sono ancora disegnate |
-| — | Autenticazione Entra ID e ruoli | Dipende dalla decisione aperta D5 |
-| — | Virtualizzazione verticale | Non ancora necessaria: la vista per risorsa ha 12 righe |
+| Ambito | Nota |
+|---|---|
+| Autenticazione Entra ID e ruoli | Dipende da D5. L'audit registra gia un campo utente, oggi nullo |
+| Dashboard a quattro riquadri (S1) | E' il Taglio 3 |
+| Revisioni offerta (S2) | Taglio 3. Senza, il lead time misurato resta parziale |
+| Notifiche Teams e Outlook (S3) | Taglio 3 |
+| Consuntivo ore (S4) | Taglio 3. E' la funzione piu esposta all'art. 4: va rilasciata con l'informativa |
+| Limiti WIP in timeline (S5) | Il limite e configurabile e confrontato in Impostazioni, non ancora segnalato sulla timeline |
+| Virtualizzazione verticale | Non ancora necessaria: la vista per risorsa ha 12 righe, le altre sono limitate a 40 gruppi |
+| Modifica dei template dei tipi di offerta | Scelta consapevole, par. 15.2.7 |
 
-## Decisioni aperte che bloccano il seguito
+## Prossimo passo consigliato
 
-D4 (chi carica la RDO), D5 (Entra ID disponibile), D6 (dove ospitare),
-D8 (tipi di offerta reali e loro attivita standard), D9 (ore reali dedicate
-alle offerte), D10 (carico non-offerta). Si veda il cap. 12 del piano.
+Il Taglio 2 del piano e di fatto assorbito nel Taglio 1: capacita, coda e
+dipendenze sono gia in esercizio. Il passo utile ora e il Taglio 3, e dentro
+quello il riquadro "A rischio" della dashboard, che e l'unica risposta alla
+domanda "cosa salta" senza scorrere la timeline.
 
-D9 e D10 sono gia rappresentabili nel modello: la capacita e "ore al giorno
-dedicate alle offerte", non l'orario contrattuale, ed esiste il tipo di
-indisponibilita `CARICO_NON_OFFERTA` per sottrarre ore dedicate a commesse e
-assistenza. Servono i numeri reali.
+Prima pero servono i numeri reali di D8, D9 e D10: senza, la heatmap e
+plausibile ma non vera, ed e su di essa che il responsabile prenderebbe
+decisioni.
