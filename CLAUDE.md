@@ -96,3 +96,16 @@ serve un calcolo, va in `src/lib` con il suo test.
   di stile ripetuti e la finestra di dati caricata. Il database, sospettato per
   primo, esegue in un millesimo e mezzo.
 - Una griglia regolare non ha bisogno di un elemento per colonna: e uno sfondo.
+- Due misure singole prese in momenti diversi non sono un confronto. Il primo
+  caricamento varia del 15% fra un giro e l'altro sulla stessa compilazione:
+  confrontando un giro prima con un giro dopo si e riportato un guadagno che non
+  esisteva. Per concludere su un tempo servono la mediana di piu giri e le due
+  compilazioni avviate una dopo l'altra sulla stessa macchina. I pesi in byte,
+  invece, sono deterministici e bastano da soli.
+- Una riduzione di peso non e una riduzione di tempo su `localhost`, dove il
+  trasferimento e quasi gratis. Si dichiara il byte risparmiato, e il tempo solo
+  dove si e misurato.
+- `verifica:ui` va eseguito su una compilazione di produzione, non su
+  `npm run dev`. In sviluppo le rotte si compilano alla prima chiamata e ci
+  mettono secondi: le attese fisse dello script scadono e segnala guasti che non
+  esistono.

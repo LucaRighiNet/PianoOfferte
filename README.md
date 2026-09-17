@@ -51,11 +51,14 @@ La verifica end-to-end SCRIVE sul database: crea una richiesta di offerta, la
 assegna, sposta una barra. Va eseguita solo su un database di sviluppo. Per
 tornare a uno stato noto: `npm run db:seed`.
 
-Eseguendola contro una compilazione di produzione (`npm run start`) serve il
+Va eseguita contro una compilazione di produzione, non contro `npm run dev`. In
+sviluppo ogni rotta si compila alla prima chiamata e ci mette secondi: le attese
+dello script scadono e segnala guasti inesistenti. Sulla produzione serve il
 consenso esplicito all'accesso di sviluppo, altrimenti il portale rifiuta di
 autenticare e fa bene:
 
 ```bash
+npm run build
 CONSENTI_ACCESSO_SVILUPPO=si npm run start &
 npm run verifica:ui
 ```
@@ -113,8 +116,8 @@ Verificate da `npm run verifica:ui` (par. 7.3 del piano).
 
 | Metrica | Soglia | Ultimo esito |
 |---|---|---|
-| Primo caricamento utile | sotto 1500 ms | circa 1150 ms |
-| Cambio filtro o raggruppamento | sotto 150 ms | circa 50 ms |
+| Primo caricamento utile | sotto 1500 ms | mediana 1196 ms su 5 giri, intervallo 1091-1269 |
+| Cambio filtro o raggruppamento | sotto 150 ms | mediana 65 ms su 5 giri, intervallo 62-94 |
 | Barre visibili raggiungibili al click | 100% | 91 su 91 |
 | Carico massimo mostrato sui dati di prova | sotto 500% | 259% |
 

@@ -100,16 +100,48 @@ committente deve decidere di volere.
 
 ## 6-bis. Prestazioni: cosa e stato misurato e ottimizzato
 
-Misure sul seme di prova (520 offerte, 1222 attivita), pagina di pianificazione.
+Misure sul seme di prova (520 offerte, 1222 attivita), pagina di pianificazione,
+compilazione di produzione. Il confronto prima/dopo e stato rifatto sulla stessa
+macchina e sugli stessi dati, avviando le due compilazioni una dopo l'altra: le
+misure prese in momenti diversi non sono confrontabili.
+
+Peso della risposta HTML, misurato con `curl | wc -c`. E' un numero
+deterministico: si ripete identico a ogni richiesta.
 
 | Livello di zoom | Peso prima | Peso dopo | Variazione |
 |---|---|---|---|
-| Due settimane | 1,27 MB | 394 KB | -69% |
-| Due mesi (predefinito) | 1,27 MB | 859 KB | -32% |
-| Trimestre | 1,27 MB | 1,15 MB | -9% |
+| Due settimane | 1.281.114 byte | 398.302 byte | -68,9% |
+| Due mesi (predefinito) | 1.281.118 byte | 872.437 byte | -31,9% |
+| Trimestre | 1.281.120 byte | 1.165.818 byte | -9,0% |
 
-Primo caricamento utile: da circa 1050 ms a circa 907 ms. Cambio filtro: da
-circa 60 ms a circa 39 ms. Soglie del par. 7.3 del piano: 1500 e 150 ms.
+Prima, il peso era identico ai tre zoom perche la finestra caricata era fissa a
+90 giorni: si trasmettevano gli stessi dati sia per mostrarne due settimane sia
+per mostrarne un trimestre.
+
+Tempi, mediana su piu giri di `verifica:ui` (tre prima, cinque dopo). Soglie del
+par. 7.3 del piano: 1500 e 150 ms.
+
+| Metrica | Prima (mediana, intervallo) | Dopo (mediana, intervallo) | Variazione |
+|---|---|---|---|
+| Primo caricamento utile | 1193 ms (1168-1239) | 1196 ms (1091-1269) | Nessuna, dentro il rumore |
+| Cambio filtro | 79,3 ms (75,5-80,9) | 64,8 ms (62,0-94,1) | Circa -18% |
+
+Il caricamento NON e migliorato, e va detto: la misura e su `localhost`, dove
+trasferire 400 KB in meno costa quasi nulla e il tempo e dominato dal render sul
+server e dall'idratazione delle righe visibili, che sono le stesse di prima. Il
+peso risparmiato si paga su rete reale: a 10 Mbit/s effettivi, i 409 KB in meno
+allo zoom normale valgono circa 0,3 s, e gli 883 KB in meno allo zoom su due
+settimane circa 0,7 s. Su collegamento in sede conta poco, da VPN o da rete
+mobile conta.
+
+Il cambio filtro migliora perche e lavoro del browser, non trasferimento: meno
+nodi e meno attributi da ricalcolare. E' l'unico guadagno che si vede anche in
+locale.
+
+Un giro singolo non basta per concludere: sulla stessa compilazione il primo
+caricamento varia di circa il 15% fra un giro e l'altro. Un confronto fra due
+misure singole prese in momenti diversi ha prodotto, in questo progetto, una
+differenza del tutto inventata.
 
 Dove NON era il costo, contro le attese:
 
