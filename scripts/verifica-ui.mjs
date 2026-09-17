@@ -197,6 +197,21 @@ if (posizionePrima) {
   spostamentoRiuscito = indicatore === 'Salvato';
 }
 
+// --- Revisione offerta (S2) ----------------------------------------------
+let revisioneAperta = false;
+const barraPerRevisione = pagina.locator('[data-corsia-persona] button[aria-label]').nth(6);
+if ((await barraPerRevisione.count()) > 0) {
+  await barraPerRevisione.click();
+  await pagina.waitForTimeout(300);
+  const pulsanteRevisione = pagina.locator('button', { hasText: '+ Revisione' });
+  if ((await pulsanteRevisione.count()) > 0) {
+    await pulsanteRevisione.click();
+    await pagina.waitForTimeout(2000);
+    const avviso = (await pagina.locator('[data-prova="avviso"]').textContent().catch(() => '')) ?? '';
+    revisioneAperta = avviso.includes('Revisione');
+  }
+}
+
 await scatta('dopo-trascinamento');
 
 // --- Impostazioni (M4) ----------------------------------------------------
@@ -291,6 +306,7 @@ if (!assegnazioneRiuscita) {
   problemi.push('il trascinamento dalla coda non ha assegnato la richiesta');
 }
 if (!spostamentoRiuscito) problemi.push('lo spostamento di una barra non ha confermato il salvataggio');
+if (!revisioneAperta) problemi.push('l apertura di una revisione non ha dato riscontro');
 if (righePersone === 0) problemi.push('la schermata Impostazioni non elenca le persone');
 if (!capacitaSalvata) problemi.push('la modifica della capacita non ha confermato il salvataggio');
 if (assenzeDopo <= assenzePrima) problemi.push('l inserimento di una assenza non ha aggiunto righe');
@@ -316,6 +332,7 @@ const esito = {
   avvisoCreazione: (avvisoCreazione ?? '').trim().slice(0, 80),
   assegnazioneRiuscita,
   spostamentoRiuscito,
+  revisioneAperta,
   impostazioni: { righePersone, capacitaSalvata, assenzePrima, assenzeDopo, assenzaEliminata },
   dashboard: { indicatori: cifreDashboard.length, vistaTabellare, massimoCarico },
   problemi,

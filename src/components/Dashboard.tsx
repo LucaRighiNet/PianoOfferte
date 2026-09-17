@@ -557,6 +557,11 @@ function TabellaLeadTime({ dati }: { dati: DatiDashboard }) {
         {dati.giorniStorico} giorni. La mediana, non la media: un paio di offerte
         lunghissime non devono spostare il valore.
       </p>
+      <p className="text-[10px]" style={{ color: 'var(--testo-debole)' }}>
+        {dati.revisioni.percentuale === null
+          ? 'Nessun dato sulle revisioni.'
+          : `Il ${formatoPercentuale(dati.revisioni.percentuale)} delle offerte ha richiesto almeno una revisione dopo l\u2019invio (${dati.revisioni.offerteConRevisione} su ${dati.revisioni.offerteTotali}), ${dati.revisioni.inCorso} in revisione adesso. Una mediana bassa con molte revisioni non significa che siamo veloci: significa che il lavoro riparte.`}
+      </p>
     </div>
   );
 }

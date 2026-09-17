@@ -400,6 +400,36 @@ export function Pianificatore({
     onRilascio: (esito) => void applicaRilascio(esito),
   });
 
+  const apriRevisione = useCallback(
+    async (offertaId: string) => {
+      setSalvataggio({ tipo: 'IN_CORSO' });
+      try {
+        const risposta = await fetch(`/api/offerte/${offertaId}/revisione`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ motivo: null }),
+        });
+        if (!risposta.ok) {
+          const dettaglio = (await risposta.json().catch(() => null)) as { errore?: string } | null;
+          const messaggio = dettaglio?.errore ?? `Operazione non riuscita (${risposta.status})`;
+          setSalvataggio({ tipo: 'ERRORE', messaggio });
+          setAvviso(messaggio);
+          return;
+        }
+        const creata = (await risposta.json()) as { numero: number; dataFine: string };
+        setSalvataggio({ tipo: 'SALVATO' });
+        setAvviso(
+          `Revisione ${creata.numero} aperta: nuova attivita fino al ${creata.dataFine}`,
+        );
+        router.refresh();
+      } catch {
+        setSalvataggio({ tipo: 'ERRORE', messaggio: 'Rete non raggiungibile' });
+        setAvviso('Rete non raggiungibile: la revisione non e stata aperta');
+      }
+    },
+    [router],
+  );
+
   const iniziaGesto = useCallback(
     (origine: OrigineGesto, evento: React.PointerEvent) => iniziaTrascinamento(origine, evento),
     [iniziaTrascinamento],
@@ -723,6 +753,7 @@ export function Pianificatore({
           oggi={dati.oggi}
           calendario={calendario}
           onCambiaStato={(nuovo) => void cambiaStato(attivitaSelezionata, nuovo)}
+          onApriRevisione={() => void apriRevisione(attivitaSelezionata.offertaId)}
           onChiudi={() => setSelezionata(null)}
         />
       ) : null}
@@ -1117,6 +1148,7 @@ function DettaglioSelezione({
   oggi,
   calendario,
   onCambiaStato,
+  onApriRevisione,
   onChiudi,
 }: {
   attivita: AttivitaVista;
@@ -1125,6 +1157,7 @@ function DettaglioSelezione({
   oggi: DataCivile;
   calendario: CalendarioLavorativo;
   onCambiaStato: (nuovo: StatoAttivitaMemorizzato) => void;
+  onApriRevisione: () => void;
   onChiudi: () => void;
 }) {
   const persona = persone.find((p) => p.id === attivita.personaId) ?? null;
@@ -1200,6 +1233,15 @@ function DettaglioSelezione({
             {ETICHETTE_STATO[s]}
           </Pulsante>
         ))}
+
+        <span className="mx-1 h-5 w-px" style={{ background: 'var(--bordo)' }} />
+
+        <Pulsante
+          onClick={onApriRevisione}
+          titolo="Il cliente ha chiesto modifiche dopo l'invio: aggiunge una attivita di revisione alla stessa persona"
+        >
+          + Revisione
+        </Pulsante>
         <Pulsante onClick={onChiudi} titolo="Chiudi il dettaglio">
           ✕
         </Pulsante>

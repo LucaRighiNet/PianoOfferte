@@ -25,6 +25,7 @@ Riferimento: `docs/00-analisi-e-piano.md`. Aggiornato al 17 settembre 2026.
 | 14.8 | Autosave con tre stati e rollback visibile | Fatto | Indicatore Salvato / In corso / Non salvato |
 | S1 | Dashboard direzionale a quattro riquadri | Fatto | 25 test sulle metriche; verifica end-to-end su indicatori, griglia e vista tabellare |
 | S5 | Limite WIP con evidenza di superamento | Fatto | Visibile in dashboard e in Impostazioni |
+| S2 | Revisioni offerta | Fatto | Nuova attivita agganciata all'ultima, stessa persona, offerta riportata in revisione; quota di revisioni in dashboard |
 
 Test unitari: 185 su 10 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
 
@@ -65,7 +66,6 @@ si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
 | Ambito | Nota |
 |---|---|
 | Autenticazione Entra ID e ruoli | Dipende da D5. L'audit registra gia un campo utente, oggi nullo |
-| Revisioni offerta (S2) | Taglio 3. Senza, il lead time misurato resta parziale |
 | Notifiche Teams e Outlook (S3) | Taglio 3 |
 | Consuntivo ore (S4) | Taglio 3. E' la funzione piu esposta all'art. 4: va rilasciata con l'informativa |
 | Limiti WIP sulla timeline (S5) | Segnalato in dashboard e Impostazioni, non ancora sulla corsia della persona |
@@ -74,19 +74,17 @@ si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
 
 ## Prossimo passo consigliato
 
-Tagli 1, 2 e 3 sono coperti salvo tre voci, e due delle tre sono bloccate da
-decisioni che non sono tecniche:
+Tagli 1, 2 e 3 sono coperti salvo tre voci, tutte bloccate da decisioni che non
+sono tecniche:
 
-1. Revisioni offerta (S2). Non e bloccata: e il prossimo pezzo utile, perche
-   senza tracciare le revisioni il tempo di preparazione misurato resta
-   parziale e la mediana di 9 giorni sottostima il lavoro reale.
-2. Notifiche Teams e Outlook (S3). Servono credenziali Microsoft Graph: dipende
+1. Notifiche Teams e Outlook (S3). Servono credenziali Microsoft Graph: dipende
    da D5.
-3. Consuntivo ore (S4). E' la funzione piu esposta all'art. 4 dello Statuto dei
+2. Consuntivo ore (S4). E' la funzione piu esposta all'art. 4 dello Statuto dei
    Lavoratori. Ho deciso di NON costruirla prima che esistano informativa e
    regolamento interno: e l'unica che misura a posteriori la prestazione
    individuale, e rilasciarla senza copertura espone l'azienda, non lo
    strumento. Vedi par. 14.1.
+3. Autenticazione Entra ID (D5).
 
 Resta prioritario, sopra tutto il resto, ottenere i numeri reali di D8, D9 e
 D10. Oggi la dashboard dice 88% di saturazione media e 78% di consegne in

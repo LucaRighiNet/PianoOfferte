@@ -762,6 +762,8 @@ confermate o corrette quando i dati reali saranno disponibili.
 | 15.2.9 | Il sistema rifiuta di collocare lavoro oltre 45 giorni dopo la data richiesta | Difetto trovato sui dati di prova: una persona con capacita netta zero faceva slittare il lavoro di dieci mesi, in silenzio. Il motore era corretto, il prodotto no: oltre quella soglia non e pianificazione, e occultamento |
 | 15.2.10 | Il colore del carico usa i tre passi di stato verde, ambra e rosso del palette di riferimento | Superano separazione per daltonismo e soglia a visione normale. L'ambra resta sotto il rapporto 3:1 su bianco, quindi ogni marca ambra porta sempre un numero visibile e la dashboard offre una vista tabellare: il colore non porta mai il significato da solo |
 | 15.2.11 | La dashboard usa una griglia per il carico, tabelle per gli elenchi e una cifra guida per i tempi | Il lavoro del lettore decide la forma. Un istogramma per i tempi sarebbe stato un grafico a una barra: il numero e il grafico |
+| 15.2.12 | Una revisione crea una attivita agganciata all'ultima, alla stessa persona, e riporta l'offerta in revisione | Chi ha fatto l'offerta e chi puo rivederla in meno tempo. L'offerta esce dal campione del tempo di preparazione finche non e riconsegnata: l'orologio riparte, ed e corretto che sia cosi |
+| 15.2.13 | Il consuntivo ore (S4) NON viene costruito finche non esistono informativa e regolamento art. 4 | E' l'unica funzione che misura a posteriori la prestazione individuale. Costruirla e lasciarla spenta sarebbe stato piu comodo, ma la tentazione di accenderla senza copertura e reale. Vedi par. 14.1 |
 
 ### 15.3 Cosa resta scoperto e va deciso dal committente
 

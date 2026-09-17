@@ -72,6 +72,17 @@ export interface DatiDashboard {
     readonly consegnateTotali: number;
     readonly percentuale: number | null;
   };
+  /**
+   * Quota di offerte che hanno richiesto almeno una revisione dopo l'invio.
+   * Spiega il tempo di preparazione: una mediana bassa con molte revisioni
+   * significa che il lavoro riparte, non che siamo veloci.
+   */
+  readonly revisioni: {
+    readonly offerteConRevisione: number;
+    readonly offerteTotali: number;
+    readonly percentuale: number | null;
+    readonly inCorso: number;
+  };
 }
 
 export async function caricaDashboard(): Promise<DatiDashboard> {
@@ -90,6 +101,7 @@ export async function caricaDashboard(): Promise<DatiDashboard> {
       include: {
         cliente: { select: { ragioneSociale: true } },
         tipoOfferta: { select: { nome: true } },
+        _count: { select: { revisioni: true } },
         attivita: {
           select: {
             id: true,
@@ -197,6 +209,9 @@ export async function caricaDashboard(): Promise<DatiDashboard> {
     };
   });
 
+  const conRevisione = offerte.filter((o) => o._count.revisioni > 0).length;
+  const inRevisione = offerte.filter((o) => o.stato === 'IN_REVISIONE').length;
+
   return {
     oggi,
     giorniStorico: GIORNI_STORICO,
@@ -207,5 +222,14 @@ export async function caricaDashboard(): Promise<DatiDashboard> {
     leadTime: leadTimeComplessivo(misurabili),
     leadTimePerTipo: leadTimePerTipo(misurabili),
     puntualita: puntualita(misurabili),
+    revisioni: {
+      offerteConRevisione: conRevisione,
+      offerteTotali: offerte.length,
+      percentuale:
+        offerte.length === 0
+          ? null
+          : Math.round((conRevisione / offerte.length) * 1000) / 10,
+      inCorso: inRevisione,
+    },
   };
 }
