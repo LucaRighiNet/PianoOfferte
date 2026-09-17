@@ -52,6 +52,19 @@ import { ModuloNuovaRdo } from './ModuloNuovaRdo';
 import { useTrascinamento, type EsitoRilascio, type OrigineGesto } from './useTrascinamento';
 import { useAnnulla, type Ripristino } from './useAnnulla';
 import { Avatar, Chip, GruppoSegmentato, Pulsante, Selettore } from './ui';
+import {
+  ETICHETTE_RUOLO,
+  puoCreareOfferta,
+  puoModificareImpostazioni,
+  puoPianificare,
+  puoRegistrareConsuntivo,
+} from '@/lib/auth/permessi';
+
+/** Termina la sessione di sviluppo e riporta alla scelta dell'utenza. */
+async function esci(): Promise<void> {
+  await fetch('/api/accesso', { method: 'DELETE' });
+  window.location.href = '/accesso';
+}
 
 const LARGHEZZA_GRIGLIA = 244;
 const ALTEZZA_CAPACITA = 22;
@@ -107,6 +120,9 @@ export function Pianificatore({
   const [avviso, setAvviso] = useState<string | null>(null);
 
   const contenitore = useRef<HTMLDivElement>(null);
+
+  const puoSpostare = puoPianificare(dati.utente.ruolo);
+  const puoCreare = puoCreareOfferta(dati.utente.ruolo);
 
   useEffect(() => {
     try {
@@ -518,8 +534,12 @@ export function Pianificatore({
   );
 
   const iniziaGesto = useCallback(
-    (origine: OrigineGesto, evento: React.PointerEvent) => iniziaTrascinamento(origine, evento),
-    [iniziaTrascinamento],
+    (origine: OrigineGesto, evento: React.PointerEvent) => {
+      // Chi non pianifica puo selezionare una barra ma non spostarla.
+      if (!puoSpostare) return;
+      iniziaTrascinamento(origine, evento);
+    },
+    [iniziaTrascinamento, puoSpostare],
   );
 
   // Tasti rapidi 1-4 sull'attivita selezionata: M7, avanzamento a un click.
@@ -531,7 +551,7 @@ export function Pianificatore({
         void eseguiAnnulla();
         return;
       }
-      if (e.key === 'n' || e.key === 'N') {
+      if ((e.key === 'n' || e.key === 'N') && puoCreare) {
         e.preventDefault();
         setMostraNuovaRdo(true);
         return;
@@ -550,7 +570,7 @@ export function Pianificatore({
     }
     window.addEventListener('keydown', suTasto);
     return () => window.removeEventListener('keydown', suTasto);
-  }, [attivitaSelezionata, cambiaStato, eseguiAnnulla]);
+  }, [attivitaSelezionata, cambiaStato, eseguiAnnulla, puoCreare]);
 
   const azzeraFiltri = useCallback(() => {
     setFiltroPersona('');
@@ -572,25 +592,47 @@ export function Pianificatore({
 
   return (
     <div className="flex h-screen flex-col">
-      <Intestazione tema={tema} onCambiaTema={cambiaTema} salvataggio={salvataggio} />
+      <Intestazione
+        tema={tema}
+        onCambiaTema={cambiaTema}
+        salvataggio={salvataggio}
+        utente={dati.utente}
+        vedeImpostazioni={puoModificareImpostazioni(dati.utente.ruolo)}
+      />
+
+      {dati.vedeTuttiICarichi ? null : (
+        <p
+          className="border-b px-4 py-1.5 text-[11px]"
+          style={{
+            borderColor: 'var(--bordo)',
+            background: 'var(--sfondo-tenue)',
+            color: 'var(--testo-tenue)',
+          }}
+        >
+          Vedi il tuo carico. Il carico nominativo dei colleghi e riservato al responsabile di
+          divisione: usa le viste per offerta o per cliente per il quadro d&apos;insieme.
+        </p>
+      )}
 
       <div
         className="flex flex-wrap items-center gap-2 border-b px-3 py-2"
         style={{ borderColor: 'var(--bordo)', background: 'var(--sfondo-pannello)' }}
       >
-        <button
-          type="button"
-          onClick={() => setMostraNuovaRdo(true)}
-          title="Nuova richiesta di offerta (tasto N)"
-          className="inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-[12px] font-medium"
-          style={{ background: 'var(--accento)', borderColor: 'var(--accento)', color: '#fff' }}
-        >
-          + Nuova RDO
-        </button>
+        {puoCreare ? (
+          <button
+            type="button"
+            onClick={() => setMostraNuovaRdo(true)}
+            title="Nuova richiesta di offerta (tasto N)"
+            className="inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-[12px] font-medium"
+            style={{ background: 'var(--accento)', borderColor: 'var(--accento)', color: '#fff' }}
+          >
+            + Nuova RDO
+          </button>
+        ) : null}
 
         <Pulsante
           onClick={() => void eseguiAnnulla()}
-          disabilitato={annulla.ultima === null}
+          disabilitato={annulla.ultima === null || !puoSpostare}
           titolo={
             annulla.ultima === null
               ? 'Niente da annullare'
@@ -858,9 +900,11 @@ export function Pianificatore({
           persone={dati.persone}
           oggi={dati.oggi}
           calendario={calendario}
+          utente={dati.utente}
           onCambiaStato={(nuovo) => void cambiaStato(attivitaSelezionata, nuovo)}
           onApriRevisione={() => void apriRevisione(attivitaSelezionata.offertaId)}
           onChiudi={() => setSelezionata(null)}
+          onAvviso={setAvviso}
         />
       ) : null}
     </div>
@@ -873,10 +917,14 @@ function Intestazione({
   tema,
   onCambiaTema,
   salvataggio,
+  utente,
+  vedeImpostazioni,
 }: {
   tema: 'chiaro' | 'scuro';
   onCambiaTema: () => void;
   salvataggio: StatoSalvataggio;
+  utente: PianoDati['utente'];
+  vedeImpostazioni: boolean;
 }) {
   return (
     <header
@@ -907,17 +955,34 @@ function Intestazione({
         >
           Dashboard
         </Link>
-        <Link
-          href="/impostazioni"
-          className="inline-flex h-7 items-center rounded-md border px-2.5 text-[12px] font-medium"
-          style={{
-            background: 'var(--sfondo-pannello)',
-            borderColor: 'var(--bordo)',
-            color: 'var(--testo)',
-          }}
+        {vedeImpostazioni ? (
+          <Link
+            href="/impostazioni"
+            className="inline-flex h-7 items-center rounded-md border px-2.5 text-[12px] font-medium"
+            style={{
+              background: 'var(--sfondo-pannello)',
+              borderColor: 'var(--bordo)',
+              color: 'var(--testo)',
+            }}
+          >
+            Impostazioni
+          </Link>
+        ) : null}
+
+        <span
+          className="flex items-center gap-1.5 text-[12px]"
+          title={`${utente.nome} ${utente.cognome} · ${ETICHETTE_RUOLO[utente.ruolo]}`}
         >
-          Impostazioni
-        </Link>
+          <Avatar
+            iniziali={`${utente.nome.charAt(0)}${utente.cognome.charAt(0)}`}
+            colore="var(--accento)"
+          />
+          <span style={{ color: 'var(--testo-tenue)' }}>{ETICHETTE_RUOLO[utente.ruolo]}</span>
+        </span>
+
+        <Pulsante onClick={() => void esci()} titolo="Esci">
+          ⏻
+        </Pulsante>
         <Pulsante onClick={onCambiaTema} titolo="Cambia tema">
           {tema === 'scuro' ? '☀' : '☾'}
         </Pulsante>
@@ -1218,7 +1283,10 @@ function RigaGruppo({
 
             const offerta = offerteMappa.get(a.offertaId);
             const nonLavorativi: number[] = [];
-            if (a.personaId !== null) {
+            // Il tratteggio dei giorni non lavorativi richiede il calendario
+            // della persona: per gli assegnatari che non siamo autorizzati a
+            // vedere nominativamente non lo abbiamo, e la barra resta piena.
+            if (a.personaId !== null && calendario.conoscePersona(a.personaId)) {
               for (const giorno of giorniTra(inizio, fine)) {
                 const colonna = colonnaDelGiorno(finestraDa, finestraA, giorno);
                 if (colonna === null) continue;
@@ -1228,7 +1296,10 @@ function RigaGruppo({
 
             const margine = valutaMargine(fine, offerta?.dataScadenzaCliente ?? null, {
               calendario,
-              personaId: a.personaId,
+              personaId:
+                a.personaId !== null && calendario.conoscePersona(a.personaId)
+                  ? a.personaId
+                  : null,
             });
 
             const barra: DatiBarra = {
@@ -1312,23 +1383,30 @@ function DettaglioSelezione({
   persone,
   oggi,
   calendario,
+  utente,
   onCambiaStato,
   onApriRevisione,
   onChiudi,
+  onAvviso,
 }: {
   attivita: AttivitaVista;
   offerta: PianoDati['offerte'][number] | null;
   persone: readonly PianoDati['persone'][number][];
   oggi: DataCivile;
   calendario: CalendarioLavorativo;
+  utente: PianoDati['utente'];
   onCambiaStato: (nuovo: StatoAttivitaMemorizzato) => void;
   onApriRevisione: () => void;
   onChiudi: () => void;
+  onAvviso: (messaggio: string | null) => void;
 }) {
   const persona = persone.find((p) => p.id === attivita.personaId) ?? null;
   const margine = valutaMargine(attivita.dataFine, offerta?.dataScadenzaCliente ?? null, {
     calendario,
-    personaId: attivita.personaId,
+    personaId:
+      attivita.personaId !== null && calendario.conoscePersona(attivita.personaId)
+        ? attivita.personaId
+        : null,
   });
   const derivato = statoVisualizzato(
     { stato: attivita.stato, dataFine: attivita.dataFine, iniziataIl: attivita.iniziataIl },
@@ -1404,6 +1482,10 @@ function DettaglioSelezione({
           </Pulsante>
         ))}
 
+        {puoRegistrareConsuntivo(utente.ruolo, utente.id, attivita.personaId) ? (
+          <CampoConsuntivo attivita={attivita} onAvviso={onAvviso} />
+        ) : null}
+
         <span className="mx-1 h-5 w-px" style={{ background: 'var(--bordo)' }} />
 
         <Pulsante
@@ -1417,5 +1499,89 @@ function DettaglioSelezione({
         </Pulsante>
       </div>
     </div>
+  );
+}
+
+/**
+ * Registrazione delle ore effettive (S4).
+ *
+ * Il campo arriva precompilato con la stima: confermare costa un click, e chi
+ * ha lavorato corregge solo se e andata diversamente. E' la mitigazione del
+ * rischio R2 applicata al consuntivo, ed evita il dato inventato per sbrigarsi.
+ *
+ * Compare solo a chi ha svolto il lavoro: la regola e in
+ * `puoRegistrareConsuntivo` e vale anche lato server.
+ */
+function CampoConsuntivo({
+  attivita,
+  onAvviso,
+}: {
+  attivita: AttivitaVista;
+  onAvviso: (messaggio: string | null) => void;
+}) {
+  const [valore, setValore] = useState<string>(
+    String(attivita.consuntivoOre ?? attivita.stimaOre),
+  );
+  const [inCorso, setInCorso] = useState(false);
+  const registrato = attivita.consuntivoOre !== null;
+
+  async function salva(): Promise<void> {
+    const ore = Number(valore.replace(',', '.'));
+    if (!Number.isFinite(ore) || ore <= 0) {
+      onAvviso('Le ore effettive devono essere un numero maggiore di zero');
+      return;
+    }
+    setInCorso(true);
+    try {
+      const risposta = await fetch(`/api/attivita/${attivita.id}/consuntivo`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ consuntivoOre: ore }),
+      });
+      if (!risposta.ok) {
+        const dettaglio = (await risposta.json().catch(() => null)) as { errore?: string } | null;
+        onAvviso(dettaglio?.errore ?? 'Registrazione non riuscita');
+        return;
+      }
+      onAvviso(`Ore effettive registrate: ${formatoOre(ore)} contro ${formatoOre(attivita.stimaOre)} stimate`);
+    } catch {
+      onAvviso('Rete non raggiungibile: le ore non sono state registrate');
+    } finally {
+      setInCorso(false);
+    }
+  }
+
+  return (
+    <span
+      className="flex items-center gap-1.5 rounded-md border px-2 py-1"
+      style={{ borderColor: 'var(--bordo)', background: 'var(--sfondo-tenue)' }}
+      title="Ore che ci hai messo davvero. Servono a tarare le stime predefinite."
+    >
+      <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--testo-debole)' }}>
+        Ore effettive
+      </span>
+      <input
+        type="number"
+        min={0.5}
+        step={0.5}
+        value={valore}
+        onChange={(e) => setValore(e.target.value)}
+        className="h-6 w-[68px] rounded border px-1.5 text-[12px] tabular-nums"
+        style={{ background: 'var(--sfondo)', borderColor: 'var(--bordo)', color: 'var(--testo)' }}
+      />
+      <button
+        type="button"
+        onClick={() => void salva()}
+        disabled={inCorso}
+        className="h-6 rounded border px-2 text-[11px] font-medium disabled:opacity-40"
+        style={{
+          background: registrato ? 'var(--sfondo-pannello)' : 'var(--accento)',
+          borderColor: registrato ? 'var(--bordo)' : 'var(--accento)',
+          color: registrato ? 'var(--testo)' : '#fff',
+        }}
+      >
+        {registrato ? 'Aggiorna' : 'Registra'}
+      </button>
+    </span>
   );
 }

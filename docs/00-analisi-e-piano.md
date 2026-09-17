@@ -767,6 +767,30 @@ confermate o corrette quando i dati reali saranno disponibili.
 | 15.2.14 | Il TESTO della barra porta cliente e descrizione dell'offerta, non il tipo di attivita | Segnalazione del committente, e aveva ragione: il tipo e gia codificato dal colore, quindi scriverlo era una ripetizione, e nella vista per risorsa l'identita dell'offerta spariva dentro il tooltip. Ora si legge a colpo d'occhio di chi e il lavoro |
 | 15.2.15 | Quando la barra e troppo stretta l'etichetta esce a destra, ma solo se c'e spazio libero fino alla barra successiva | Un'etichetta sovrapposta a un'altra barra e peggio di nessuna etichetta. Con barre da mezza giornata a 22 pixel al giorno, il testo dentro non ci sta mai |
 | 15.2.16 | Disfare una assegnazione riporta l'attivita in coda senza toccare i successori | Serve per annullare un rilascio sbagliato, e da solo per togliere un lavoro dalle mani sbagliate. Spostare anche i successori significherebbe muovere lavoro che qualcun altro ha gia in mano |
+| 15.2.17 | L'identita arriva dalla piattaforma, il RUOLO dal database | Cosi i permessi li amministra l'azienda in Impostazioni, non chi configura i gruppi della directory. Cambiare un ruolo non richiede un ticket all'IT |
+| 15.2.18 | Entra ID si integra tramite l'autenticazione della piattaforma Azure, non con un flusso OIDC nell'applicazione | La piattaforma verifica il token e inietta `x-ms-client-principal`; le richieste esterne non possono impostare quelle intestazioni. E' meno codice da mantenere e meno superficie da sbagliare |
+| 15.2.19 | Il default di `MODALITA_AUTENTICAZIONE` e la modalita meno privilegiata | Un errore di configurazione non deve far credere all'applicazione di essere protetta da Entra ID quando non lo e |
+| 15.2.20 | Chi non puo vedere un dato non lo riceve | La restrizione sta al confine dei dati, non nell'interfaccia. Nasconderlo a schermo lasciandolo nella risposta significherebbe non averlo nascosto |
+| 15.2.21 | Nemmeno il responsabile registra il consuntivo ore al posto di altri | Sarebbe un dato sulla prestazione altrui inserito da un terzo, e non e cio che serve a tarare le stime. E' la regola che tiene la funzione dentro il perimetro dell'art. 4 |
+| 15.2.22 | Una notifica parte solo se c'e qualcosa da fare | Una notifica che arriva tutti i giorni viene archiviata senza leggerla. Chi non ha nulla non riceve nulla |
+| 15.2.23 | Il canale notifiche predefinito scrive nel registro del server | Non e un segnaposto: permette di verificare chi verrebbe disturbato e perche, senza spedire niente a nessuno finche non ci sono le credenziali |
+| 15.2.24 | La rotta del digest resta chiusa senza chiave configurata | Un endpoint che spedisce posta a tutta la divisione non deve essere aperto per dimenticanza |
+
+### 15.4 Sul consuntivo ore e l'art. 4
+
+Avevo deciso di non costruirlo finche non esistessero informativa e regolamento.
+Il committente ha confermato di procedere. L'ho costruito, e insieme ho prodotto
+la bozza di informativa in `docs/02-informativa-art4.md`, cosi il prerequisito e
+azionabile invece che bloccante.
+
+Le salvaguardie che avevo progettato sono nel codice, non nelle intenzioni:
+lo registra solo chi ha svolto il lavoro, il campo arriva precompilato con la
+stima, ogni scrittura finisce nel registro con l'autore, i consuntivi altrui in
+forma nominativa li vedono solo responsabile e direzione, e in nessun punto del
+portale esiste una classifica fra persone.
+
+Resta vero, e va detto: l'informativa va validata da un consulente e resa nota
+prima del rilascio. Il codice non puo farlo al posto dell'azienda.
 
 ### 15.3 Cosa resta scoperto e va deciso dal committente
 

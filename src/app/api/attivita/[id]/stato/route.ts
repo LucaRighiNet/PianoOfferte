@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { daIstante } from '@/lib/data/dataCivile';
+import { richiediUtente, AccessoNegato } from '@/lib/auth/sessione';
+import { puoCambiareStato } from '@/lib/auth/permessi';
+import { rispostaDaErrore } from '@/lib/server/risposte';
 
 /**
  * Cambio di stato di una attivita (M7, avanzamento a un click).
@@ -58,12 +61,33 @@ export async function PATCH(
     );
   }
 
-  const attuale = await db.attivita.findUnique({
-    where: { id },
-    select: { id: true, versione: true, stato: true, iniziataIl: true, dataInizio: true },
-  });
-  if (!attuale) {
-    return NextResponse.json({ errore: 'Attivita non trovata' }, { status: 404 });
+  let utenteId: string;
+  let attuale;
+  try {
+    const utente = await richiediUtente();
+    utenteId = utente.id;
+
+    attuale = await db.attivita.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        versione: true,
+        stato: true,
+        iniziataIl: true,
+        dataInizio: true,
+        personaId: true,
+      },
+    });
+    if (!attuale) {
+      return NextResponse.json({ errore: 'Attivita non trovata' }, { status: 404 });
+    }
+
+    // Un operatore aggiorna cio che ha in mano, non il lavoro di un collega.
+    if (!puoCambiareStato(utente.ruolo, utente.id, attuale.personaId)) {
+      throw new AccessoNegato('Questa attivita non e assegnata a te');
+    }
+  } catch (errore) {
+    return rispostaDaErrore(errore);
   }
   if (attuale.versione !== versione) {
     return NextResponse.json(
@@ -99,6 +123,7 @@ export async function PATCH(
     data: {
       entita: 'Attivita',
       entitaId: id,
+      utenteId,
       azione: 'CAMBIO_STATO',
       prima: { stato: attuale.stato },
       dopo: { stato: aggiornata.stato },

@@ -6,9 +6,13 @@ import {
   ConflittoDiVersione,
   PianificazioneRifiutata,
 } from './pianificazione';
+import { AccessoNegato } from '@/lib/auth/sessione';
 
 /** Traduzione uniforme degli errori di dominio in risposte HTTP. */
 export function rispostaDaErrore(errore: unknown): NextResponse {
+  if (errore instanceof AccessoNegato) {
+    return NextResponse.json({ errore: errore.message }, { status: errore.stato });
+  }
   if (errore instanceof ConflittoDiVersione) {
     return NextResponse.json(
       { errore: errore.message, versioneAttuale: errore.versioneAttuale },

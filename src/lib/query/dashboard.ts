@@ -16,6 +16,7 @@ import {
   caricoGiornaliero,
   type CaricoAggregato,
 } from '@/lib/capacita/saturazione';
+import { puoVedereCaricoNominativo, type Utente } from '@/lib/auth/permessi';
 import {
   leadTimeComplessivo,
   leadTimePerTipo,
@@ -55,6 +56,9 @@ export interface RigaCarico {
 }
 
 export interface DatiDashboard {
+  readonly utente: Utente;
+  /** Falso quando l'utente vede solo i propri dati nominativi. */
+  readonly vedeTuttiICarichi: boolean;
   readonly oggi: DataCivile;
   readonly giorniStorico: number;
   readonly settimane: readonly SettimanaCarico[];
@@ -85,12 +89,12 @@ export interface DatiDashboard {
   };
 }
 
-export async function caricaDashboard(): Promise<DatiDashboard> {
+export async function caricaDashboard(utente: Utente): Promise<DatiDashboard> {
   const oggi = daIstante(new Date());
   const inizioCarico = inizioSettimana(oggi);
   const inizioStorico = aggiungiGiorni(oggi, -GIORNI_STORICO);
 
-  const [persone, offerte, calendario] = await Promise.all([
+  const [tuttePersone, offerte, calendario] = await Promise.all([
     db.persona.findMany({
       where: { attiva: true },
       orderBy: [{ cognome: 'asc' }, { nome: 'asc' }],
@@ -119,6 +123,12 @@ export async function caricaDashboard(): Promise<DatiDashboard> {
     }),
     caricaCalendario(),
   ]);
+
+  // Stessa regola della timeline: chi non puo vedere il carico nominativo dei
+  // colleghi non lo riceve nella risposta.
+  const persone = tuttePersone.filter((p) =>
+    puoVedereCaricoNominativo(utente.ruolo, utente.id, p.id),
+  );
 
   // --- carico delle prossime settimane -------------------------------------
   const attivitaPianificate = offerte.flatMap((o) =>
@@ -213,6 +223,8 @@ export async function caricaDashboard(): Promise<DatiDashboard> {
   const inRevisione = offerte.filter((o) => o.stato === 'IN_REVISIONE').length;
 
   return {
+    utente,
+    vedeTuttiICarichi: persone.length === tuttePersone.length,
     oggi,
     giorniStorico: GIORNI_STORICO,
     settimane,

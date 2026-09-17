@@ -2,6 +2,7 @@ import 'server-only';
 import { db } from '@/lib/db';
 import { daIstante, type DataCivile, aDateUtc } from '@/lib/data/dataCivile';
 import type { StatoAttivitaMemorizzato } from '@/lib/offerta/rischio';
+import { puoVedereCaricoNominativo, puoVedereValori, type Utente } from '@/lib/auth/permessi';
 
 /**
  * Caricamento della finestra di pianificazione.
@@ -47,6 +48,7 @@ export interface AttivitaVista {
   readonly tipoAttivita: string;
   readonly personaId: string | null;
   readonly stimaOre: number;
+  readonly consuntivoOre: number | null;
   readonly dataInizio: DataCivile | null;
   readonly dataFine: DataCivile | null;
   readonly stato: StatoAttivitaMemorizzato;
@@ -86,6 +88,10 @@ export interface TipoAttivitaVista {
 }
 
 export interface PianoDati {
+  readonly utente: Utente;
+  /** Vero se l'utente vede il carico nominativo di tutti, non solo il proprio. */
+  readonly vedeTuttiICarichi: boolean;
+  readonly vedeValori: boolean;
   readonly finestraDa: DataCivile;
   readonly finestraA: DataCivile;
   readonly oggi: DataCivile;
@@ -112,7 +118,11 @@ function iniziali(nome: string, cognome: string): string {
   return `${nome.charAt(0)}${cognome.charAt(0)}`.toUpperCase();
 }
 
-export async function caricaPiano(da: DataCivile, a: DataCivile): Promise<PianoDati> {
+export async function caricaPiano(
+  da: DataCivile,
+  a: DataCivile,
+  utente: Utente,
+): Promise<PianoDati> {
   const daDate = aDateUtc(da);
   const aDate = aDateUtc(a);
 
@@ -188,11 +198,24 @@ export async function caricaPiano(da: DataCivile, a: DataCivile): Promise<PianoD
     select: { predecessoreId: true, successoreId: true },
   });
 
+  /*
+   * Chi non puo vedere il carico nominativo dei colleghi non lo riceve
+   * nemmeno: la restrizione sta qui, al confine dei dati, e non
+   * nell'interfaccia. Nasconderlo a schermo lasciandolo nella risposta
+   * significherebbe non averlo nascosto. Par. 14.1 del piano.
+   */
+  const personeVisibili = persone.filter((p) =>
+    puoVedereCaricoNominativo(utente.ruolo, utente.id, p.id),
+  );
+
   return {
+    utente,
+    vedeTuttiICarichi: personeVisibili.length === persone.length,
+    vedeValori: puoVedereValori(utente.ruolo),
     finestraDa: da,
     finestraA: a,
     oggi: daIstante(new Date()),
-    persone: persone.map((p) => ({
+    persone: personeVisibili.map((p) => ({
       id: p.id,
       nome: p.nome,
       cognome: p.cognome,
@@ -211,6 +234,7 @@ export async function caricaPiano(da: DataCivile, a: DataCivile): Promise<PianoD
       tipoAttivita: a.tipoAttivita.nome,
       personaId: a.personaId,
       stimaOre: Number(a.stimaOre),
+      consuntivoOre: a.consuntivoOre === null ? null : Number(a.consuntivoOre),
       dataInizio: daColonnaDataOpz(a.dataInizio),
       dataFine: daColonnaDataOpz(a.dataFine),
       stato: a.stato as StatoAttivitaMemorizzato,

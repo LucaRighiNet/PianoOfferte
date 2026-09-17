@@ -146,6 +146,18 @@ export class CalendarioLavorativo {
     if (proprie) yield* proprie;
   }
 
+  /**
+   * Vero se il calendario ha i dati di questa persona.
+   *
+   * Serve a chi riceve un insieme ridotto di persone per motivi di visibilita
+   * (par. 14.1 del piano): le attivita altrui restano visibili, ma il loro
+   * calendario no. Il chiamante degrada invece di sollevare eccezione, e senza
+   * che qui si finga di sapere cose che non si sanno.
+   */
+  conoscePersona(personaId: string): boolean {
+    return this.#persone.has(personaId);
+  }
+
   eGiornoLavorativo(personaId: string, giorno: DataCivile): boolean {
     return this.oreDisponibili(personaId, giorno) > 0;
   }

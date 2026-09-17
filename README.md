@@ -25,6 +25,10 @@ L'applicazione risponde su:
 - http://localhost:3000/pianificazione - timeline, carico e coda
 - http://localhost:3000/dashboard - indicatori direzionali
 - http://localhost:3000/impostazioni - capacita, calendario, stime
+- http://localhost:3000/accesso - scelta dell'utenza in modalita sviluppo
+
+Al primo avvio si arriva alla pagina di accesso: in modalita sviluppo si sceglie
+con quale utenza entrare, e ogni ruolo vede e puo fare cose diverse.
 
 ## Comandi
 
@@ -85,6 +89,10 @@ Derivano dai capitoli 5.4 e 14 del piano.
    giorni dalla data richiesta, l'operazione viene rifiutata con il motivo.
 10. Un colore di stato non porta mai il significato da solo: accanto c'e sempre
     un numero o un'etichetta, e per il carico esiste una vista tabellare.
+11. Le restrizioni di visibilita si applicano al confine dei dati, non
+    nell'interfaccia: cio che un ruolo non puo vedere non viene trasmesso.
+12. Il ruolo viene dal database, mai dai claim dell'identita: i permessi li
+    amministra l'azienda in Impostazioni, non chi configura la directory.
 
 ## Soglie prestazionali
 
@@ -97,9 +105,30 @@ Verificate da `npm run verifica:ui` (par. 7.3 del piano).
 | Barre visibili raggiungibili al click | 100% | 91 su 91 |
 | Carico massimo mostrato sui dati di prova | sotto 500% | 259% |
 
+## Autenticazione
+
+| Modalita | Come funziona | Quando si usa |
+|---|---|---|
+| `sviluppo` | Si sceglie l'utenza dalla pagina di accesso | In locale, e per provare i ruoli |
+| `easyauth` | L'identita arriva dall'intestazione `x-ms-client-principal` iniettata dalla piattaforma Azure collegata a Microsoft Entra ID | In esercizio |
+
+In entrambi i casi il ruolo viene dal database. Chi e autenticato ma non censito
+fra le persone non entra: va aggiunto in Impostazioni.
+
+## Notifiche
+
+Il digest giornaliero si invia chiamando `POST /api/notifiche/digest` con
+l'intestazione `x-chiave-notifiche`, da uno scheduler esterno. Scrive solo a chi
+ha davvero qualcosa da fare.
+
 ## Conformita
 
 Il portale tratta dati sulla prestazione lavorativa di persone identificate.
 Prima del rilascio in esercizio vanno prodotti informativa e regolamento interno
-secondo l'art. 4 dello Statuto dei Lavoratori e la disciplina privacy: si veda
-il par. 14.1 del piano. Non e un adempimento successivo.
+secondo l'art. 4 dello Statuto dei Lavoratori e la disciplina privacy.
+
+La bozza e in `docs/02-informativa-art4.md` e va validata da consulente del
+lavoro e responsabile della protezione dei dati. Le salvaguardie tecniche sono
+gia nel codice: visibilita per ruolo applicata al confine dei dati, consuntivo
+ore inseribile solo dalla persona che ha svolto il lavoro, nessuna classifica
+fra persone, registro degli eventi con l'autore.

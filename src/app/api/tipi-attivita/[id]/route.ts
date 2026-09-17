@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { leggiCorpo, rispostaDaErrore } from '@/lib/server/risposte';
+import { richiediPermesso, richiediUtente } from '@/lib/auth/sessione';
+import { puoModificareImpostazioni } from '@/lib/auth/permessi';
 
 /**
  * Stima predefinita per tipo di attivita (M1).
@@ -27,6 +29,12 @@ export async function PATCH(
   }
 
   try {
+    const utente = await richiediUtente();
+    richiediPermesso(
+      puoModificareImpostazioni(utente.ruolo),
+      'Solo il responsabile di divisione puo modificare le stime predefinite',
+    );
+
     const esistente = await db.tipoAttivita.findUnique({ where: { id } });
     if (!esistente) return NextResponse.json({ errore: 'Tipo non trovato' }, { status: 404 });
 

@@ -105,6 +105,9 @@ export function allocazionePerPersona(
   for (const a of attivita) {
     if (a.personaId === null || a.dataInizio === null || a.dataFine === null) continue;
     if (a.stimaOre <= 0) continue;
+    // Senza il calendario di quella persona non si puo ripartire nulla: e il
+    // caso di chi riceve un insieme ridotto di persone per visibilita.
+    if (!calendario.conoscePersona(a.personaId)) continue;
 
     const quote = ripartisciSuFinestra(
       calendario,

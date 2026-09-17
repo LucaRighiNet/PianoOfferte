@@ -284,3 +284,27 @@ describe('aggregazione settimanale', () => {
     expect(SOGLIE_PREDEFINITE).toEqual({ scaricoFinoA: 40, sanoFinoA: 85, pienoFinoA: 100 });
   });
 });
+
+describe('persone fuori dal calendario', () => {
+  it('ignora le attivita di chi non e nel calendario, senza sollevare eccezione', () => {
+    const c = cal();
+    const alloc = allocazionePerPersona(c, [
+      {
+        id: 'a1',
+        personaId: 'p1',
+        dataInizio: dataCivile('2026-09-16'),
+        dataFine: dataCivile('2026-09-16'),
+        stimaOre: 4,
+      },
+      {
+        id: 'a2',
+        personaId: 'sconosciuta',
+        dataInizio: dataCivile('2026-09-16'),
+        dataFine: dataCivile('2026-09-16'),
+        stimaOre: 8,
+      },
+    ]);
+    expect(alloc.size).toBe(1);
+    expect(alloc.get('p1')?.get(dataCivile('2026-09-16'))).toBe(4);
+  });
+});

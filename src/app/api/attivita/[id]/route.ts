@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { eDataCivile, type DataCivile } from '@/lib/data/dataCivile';
 import { pianificaAttivita } from '@/lib/server/pianificazione';
 import { leggiCorpo, rispostaDaErrore } from '@/lib/server/risposte';
+import { richiediPermesso, richiediUtente } from '@/lib/auth/sessione';
+import { puoPianificare } from '@/lib/auth/permessi';
 
 /**
  * Assegnazione, spostamento e ridimensionamento di una attivita (M2, M5).
@@ -43,9 +45,16 @@ export async function PATCH(
   if (!letto.ok) return letto.risposta;
 
   try {
+    const utente = await richiediUtente();
+    richiediPermesso(
+      puoPianificare(utente.ruolo),
+      'Solo il responsabile di divisione puo assegnare e spostare il lavoro',
+    );
+
     const esito = await pianificaAttivita({
       attivitaId: id,
       versione: letto.dati.versione,
+      utenteId: utente.id,
       ...(letto.dati.personaId !== undefined ? { personaId: letto.dati.personaId } : {}),
       ...(letto.dati.dataInizio !== undefined
         ? { dataInizio: letto.dati.dataInizio as DataCivile }

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { leggiCorpo, rispostaDaErrore } from '@/lib/server/risposte';
+import { richiediPermesso, richiediUtente } from '@/lib/auth/sessione';
+import { puoModificareImpostazioni } from '@/lib/auth/permessi';
 
 /**
  * Capacita e parametri di una persona (M4, decisione D9 del piano).
@@ -34,6 +36,12 @@ export async function PATCH(
   }
 
   try {
+    const utente = await richiediUtente();
+    richiediPermesso(
+      puoModificareImpostazioni(utente.ruolo),
+      'Solo il responsabile di divisione puo modificare capacita e limiti',
+    );
+
     const precedente = await db.persona.findUnique({
       where: { id },
       select: { capacitaOreGiorno: true, percentualeContratto: true, limiteWip: true, attiva: true },

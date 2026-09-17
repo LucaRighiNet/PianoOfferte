@@ -301,3 +301,20 @@ describe('espansione della durata', () => {
     );
   });
 });
+
+describe('conoscenza delle persone', () => {
+  it('riconosce le persone che ha', () => {
+    const c = cal();
+    expect(c.conoscePersona('p1')).toBe(true);
+    expect(c.conoscePersona('p3')).toBe(true);
+  });
+
+  /**
+   * E' il caso di chi riceve un insieme ridotto di persone per motivi di
+   * visibilita: le attivita altrui restano visibili, il loro calendario no.
+   * Il chiamante deve poterlo chiedere invece di scoprirlo con una eccezione.
+   */
+  it('dichiara di non conoscere le altre, senza sollevare eccezione', () => {
+    expect(cal().conoscePersona('sconosciuta')).toBe(false);
+  });
+});

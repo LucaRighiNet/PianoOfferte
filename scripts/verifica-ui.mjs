@@ -43,6 +43,27 @@ pagina.on('response', (r) => {
   if (r.status() >= 400) risorseNonCaricate.push(`${r.url()} -> HTTP ${r.status()}`);
 });
 
+/** Accesso in modalita sviluppo: le pagine richiedono una utenza censita. */
+async function accediCome(email) {
+  const esito = await pagina.evaluate(async (indirizzo) => {
+    const r = await globalThis.fetch('/api/accesso', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: indirizzo }),
+    });
+    return r.status;
+  }, email);
+  if (esito !== 200) problemi.push(`accesso come ${email} non riuscito (${esito})`);
+}
+
+const RESPONSABILE = 'luca.righi@righisolutions.com';
+const OPERATORE = 'domenico.benassi@righisolutions.com';
+
+// La prima visita porta alla pagina di accesso: e la guardia che deve esistere.
+await pagina.goto(INDIRIZZO, { waitUntil: 'networkidle' });
+const redirettoAdAccesso = pagina.url().includes('/accesso');
+await accediCome(RESPONSABILE);
+
 const avvio = Date.now();
 await pagina.goto(INDIRIZZO, { waitUntil: 'networkidle' });
 const msCaricamento = Date.now() - avvio;
@@ -268,6 +289,25 @@ if ((await rigaProva.count()) > 0) {
 }
 await scatta('impostazioni');
 
+// --- Ruoli (art. 4, par. 14.1) -------------------------------------------
+// Un operatore non pianifica, non crea richieste e non vede il carico
+// nominativo dei colleghi. La restrizione si verifica dal di fuori.
+await accediCome(OPERATORE);
+await pagina.goto(INDIRIZZO, { waitUntil: 'networkidle' });
+await pagina.waitForTimeout(400);
+const operatore = {
+  vedeNuovaRdo: (await pagina.locator('button', { hasText: '+ Nuova RDO' }).count()) > 0,
+  vedeImpostazioni: (await pagina.locator('a', { hasText: 'Impostazioni' }).count()) > 0,
+  avvisoVistaRidotta: (await pagina.locator('text=Vedi il tuo carico').count()) > 0,
+  corsie: await pagina.locator('[data-corsia-persona]').count(),
+};
+// Le impostazioni gli sono precluse anche per indirizzo diretto.
+await pagina.goto('http://localhost:3000/impostazioni', { waitUntil: 'networkidle' });
+const operatoreRespintoDaImpostazioni = !pagina.url().includes('/impostazioni');
+await scatta('vista-operatore');
+
+await accediCome(RESPONSABILE);
+
 // --- Dashboard (S1) -------------------------------------------------------
 await pagina.goto('http://localhost:3000/dashboard', { waitUntil: 'networkidle' });
 const cifreDashboard = await pagina.evaluate(() =>
@@ -325,6 +365,16 @@ if (!capacitaSalvata) problemi.push('la modifica della capacita non ha confermat
 if (assenzeDopo <= assenzePrima) problemi.push('l inserimento di una assenza non ha aggiunto righe');
 else if (!assenzaEliminata) problemi.push('l eliminazione di una assenza non ha rimosso la riga');
 
+if (!redirettoAdAccesso) problemi.push('senza utenza la pianificazione non rimanda all accesso');
+if (operatore.vedeNuovaRdo) problemi.push('un operatore vede il pulsante Nuova RDO');
+if (operatore.vedeImpostazioni) problemi.push('un operatore vede il collegamento a Impostazioni');
+if (!operatore.avvisoVistaRidotta) problemi.push('a un operatore manca l avviso di vista ridotta');
+if (operatore.corsie !== 1) {
+  problemi.push(`un operatore vede ${operatore.corsie} corsie risorsa invece della sola propria`);
+}
+if (!operatoreRespintoDaImpostazioni) {
+  problemi.push('un operatore raggiunge Impostazioni per indirizzo diretto');
+}
 if (cifreDashboard.length !== 4) problemi.push('la dashboard non mostra quattro indicatori');
 if (righeCarico === 0) problemi.push('la griglia di carico e vuota');
 if (!vistaTabellare) {
@@ -349,6 +399,8 @@ const esito = {
   revisioneAperta,
   impostazioni: { righePersone, capacitaSalvata, assenzePrima, assenzeDopo, assenzaEliminata },
   dashboard: { indicatori: cifreDashboard.length, vistaTabellare, massimoCarico },
+  accesso: { redirettoAdAccesso },
+  ruoloOperatore: { ...operatore, respintoDaImpostazioni: operatoreRespintoDaImpostazioni },
   problemi,
 };
 globalThis.console.log(JSON.stringify(esito, null, 2));

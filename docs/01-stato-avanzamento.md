@@ -28,9 +28,13 @@ Riferimento: `docs/00-analisi-e-piano.md`. Aggiornato al 17 settembre 2026.
 | 8.3 | Annulla delle ultime azioni di pianificazione, con Ctrl+Z | Fatto | Verifica end-to-end; pila di dieci azioni, ognuna con il proprio controllo di concorrenza |
 | S5 | Limite WIP segnalato sulla corsia della persona | Fatto | 4 test; conteggio sul lavoro totale, non su quello filtrato |
 | 15.2.14 | Cliente e descrizione dell'offerta leggibili sulla barra | Fatto | Etichetta dentro o fuori la barra secondo lo spazio |
+| D5 | Autenticazione: identita dalla piattaforma Entra ID o pagina di accesso in sviluppo | Fatto | 12 test sul parser delle intestazioni; verifica end-to-end sul rimando all'accesso |
+| 14.1 | Permessi per ruolo applicati al confine dei dati | Fatto | 20 test; verifica end-to-end che un operatore non veda Nuova RDO, Impostazioni ne il carico dei colleghi |
+| S4 | Consuntivo ore, registrabile solo da chi ha svolto il lavoro | Fatto | Regola nei permessi e nell'API; bozza di informativa in docs/02 |
+| S3 | Notifiche: digest giornaliero su registro o Microsoft Graph | Fatto | 25 test su contenuto e configurazione; endpoint provato con e senza chiave |
 | S2 | Revisioni offerta | Fatto | Nuova attivita agganciata all'ultima, stessa persona, offerta riportata in revisione; quota di revisioni in dashboard |
 
-Test unitari: 189 su 10 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
+Test unitari: 249 su 14 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
 
 ## Soglie prestazionali, ultima misura
 
@@ -65,32 +69,45 @@ si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
 | Due `void` per zittire variabili inutilizzate | Rilettura | Import e variabile rimossi |
 | Il testo della barra ripeteva il tipo di attivita, gia codificato dal colore, e l'identita dell'offerta spariva | Segnalazione del committente | Il testo porta cliente e descrizione; il tipo resta nel tooltip |
 | Una pila di annullamento che leggeva lo stato dentro un aggiornatore di React | Rilettura prima dell'uso | Chi annulla legge la cima della pila e poi la rimuove |
+| Filtrando le persone per visibilita, il calendario lato client non conosceva piu gli assegnatari altrui e sollevava eccezione | Verifica end-to-end sul ruolo operatore | Il calendario dichiara chi conosce, il chiamante degrada; nessun dato altrui viene trasmesso per aggirare il problema |
+| Nel digest le ore venivano prese con un indice dell'array non filtrato, quindi dall'attivita sbagliata | Rilettura prima dei test | Le ore viaggiano insieme all'attivita |
+| Una funzione di permesso che ritornava sempre vero | Rilettura | Rimossa: non esisteva una regola dietro |
+| Il pulsante Nuova RDO restava visibile a un operatore perche una mia sostituzione nel sorgente era andata a vuoto in silenzio | Verifica end-to-end sui ruoli | Rifatta con controllo che si applichi |
+| Contatori del digest che mescolavano messaggi e persone | Lettura dell'esito | Separati: chi pianifica riceve due messaggi |
 
 ## Cosa manca
 
 | Ambito | Nota |
 |---|---|
-| Autenticazione Entra ID e ruoli | Dipende da D5. L'audit registra gia un campo utente, oggi nullo |
-| Notifiche Teams e Outlook (S3) | Taglio 3 |
-| Consuntivo ore (S4) | Taglio 3. E' la funzione piu esposta all'art. 4: va rilasciata con l'informativa |
 | Virtualizzazione verticale | Non ancora necessaria: la vista per risorsa ha 12 righe, le altre sono limitate a 40 gruppi |
 | Modifica dei template dei tipi di offerta | Scelta consapevole, par. 15.2.7 |
 
-## Prossimo passo consigliato
+## Cosa resta da fare, e a chi tocca
 
-Tagli 1, 2 e 3 sono coperti salvo tre voci, tutte bloccate da decisioni che non
-sono tecniche:
+Il perimetro concordato e coperto. Cio che resta non e codice.
 
-1. Notifiche Teams e Outlook (S3). Servono credenziali Microsoft Graph: dipende
-   da D5.
-2. Consuntivo ore (S4). E' la funzione piu esposta all'art. 4 dello Statuto dei
-   Lavoratori. Ho deciso di NON costruirla prima che esistano informativa e
-   regolamento interno: e l'unica che misura a posteriori la prestazione
-   individuale, e rilasciarla senza copertura espone l'azienda, non lo
-   strumento. Vedi par. 14.1.
-3. Autenticazione Entra ID (D5).
+| # | Voce | A chi tocca |
+|---|---|---|
+| 1 | Numeri reali di D8, D9 e D10: tipi di offerta effettivi, ore davvero dedicate alle offerte, carico non-offerta per persona | Committente |
+| 2 | Validare la bozza di informativa art. 4 e renderla nota prima dell'avvio | Consulente del lavoro e responsabile protezione dati |
+| 3 | Scegliere dove ospitare e configurare `MODALITA_AUTENTICAZIONE=easyauth` con Entra ID davanti | IT |
+| 4 | Credenziali Microsoft Graph e scheduler giornaliero per il digest | IT |
+| 5 | Due settimane di affiancamento dopo il rilascio, con cronometro sull'inserimento RDO e sull'assegnazione | Committente |
 
-Resta prioritario, sopra tutto il resto, ottenere i numeri reali di D8, D9 e
-D10. Oggi la dashboard dice 88% di saturazione media e 78% di consegne in
-tempo: sono cifre coerenti e credibili, ma calcolate su capacita inventate. Il
-responsabile prenderebbe decisioni su di esse.
+Il primo punto e il piu importante di tutti. Oggi la dashboard dice 88% di
+saturazione media e 78% di consegne in tempo: cifre coerenti e credibili,
+calcolate su capacita che ha inventato chi ha scritto i dati di prova. Il
+responsabile di divisione prenderebbe decisioni su di esse.
+
+Tutto il resto dello strumento e pronto a riceverli: la capacita e gia "ore
+dedicate alle offerte" e non orario contrattuale, il carico non-offerta ha gia
+la sua voce, i tipi di offerta hanno gia i template. Servono i valori veri.
+
+## Idee scartate, e perche
+
+Non tutto cio che si poteva aggiungere andava aggiunto. Restano fuori per
+scelta, non per dimenticanza: percentuale di completamento manuale, timesheet
+completo, gestione documentale dell'offerta, configuratore prezzi, dipendenze
+diverse da Fine-Inizio, livellamento automatico delle risorse, chat interna,
+avanzamento della commessa dopo la consegna. Il motivo di ciascuna e nel
+par. 5.4 del piano.

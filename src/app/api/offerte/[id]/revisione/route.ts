@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { eDataCivile, type DataCivile } from '@/lib/data/dataCivile';
 import { creaRevisione, RevisioneNonPossibile } from '@/lib/server/revisioni';
 import { leggiCorpo, rispostaDaErrore } from '@/lib/server/risposte';
+import { richiediPermesso, richiediUtente } from '@/lib/auth/sessione';
+import { puoPianificare } from '@/lib/auth/permessi';
 import { DurataNonPianificabile } from '@/lib/calendario/calendarioLavorativo';
 
 const Corpo = z.object({
@@ -23,6 +25,13 @@ export async function POST(
   if (!letto.ok) return letto.risposta;
 
   try {
+    const utente = await richiediUtente();
+    // Aprire una revisione crea lavoro nuovo e lo colloca: e pianificazione.
+    richiediPermesso(
+      puoPianificare(utente.ruolo),
+      'Solo il responsabile di divisione puo aprire una revisione',
+    );
+
     const creata = await creaRevisione({
       offertaId: id,
       motivo: letto.dati.motivo ?? null,

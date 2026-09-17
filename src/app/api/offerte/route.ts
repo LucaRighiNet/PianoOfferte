@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { eDataCivile, type DataCivile } from '@/lib/data/dataCivile';
 import { creaOfferta, DatiOffertaNonValidi } from '@/lib/server/offerte';
 import { leggiCorpo, rispostaDaErrore } from '@/lib/server/risposte';
+import { richiediPermesso, richiediUtente } from '@/lib/auth/sessione';
+import { puoCreareOfferta } from '@/lib/auth/permessi';
 
 const Corpo = z
   .object({
@@ -30,6 +32,12 @@ export async function POST(richiesta: Request): Promise<NextResponse> {
   if (!letto.ok) return letto.risposta;
 
   try {
+    const utente = await richiediUtente();
+    richiediPermesso(
+      puoCreareOfferta(utente.ruolo),
+      'Solo responsabile, KAM e direzione possono inserire una richiesta di offerta',
+    );
+
     const creata = await creaOfferta({
       descrizione: letto.dati.descrizione,
       ...(letto.dati.clienteId !== undefined ? { clienteId: letto.dati.clienteId } : {}),

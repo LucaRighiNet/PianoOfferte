@@ -1,5 +1,7 @@
 import { aggiungiGiorni, daIstante, eDataCivile, inizioSettimana } from '@/lib/data/dataCivile';
+import { redirect } from 'next/navigation';
 import { caricaPiano } from '@/lib/query/piano';
+import { utenteCorrente } from '@/lib/auth/sessione';
 import { Pianificatore } from '@/components/Pianificatore';
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +17,9 @@ export default async function PaginaPianificazione({
 }: {
   searchParams: Promise<{ da?: string }>;
 }) {
+  const utente = await utenteCorrente();
+  if (utente === null) redirect('/accesso');
+
   const parametri = await searchParams;
   const oggi = daIstante(new Date());
   const ancora =
@@ -25,7 +30,7 @@ export default async function PaginaPianificazione({
   const da = aggiungiGiorni(ancora, -MARGINE_GIORNI);
   const a = aggiungiGiorni(ancora, MARGINE_GIORNI + 120);
 
-  const dati = await caricaPiano(da, a);
+  const dati = await caricaPiano(da, a, utente);
 
   return <Pianificatore dati={dati} ancoraIniziale={ancora} />;
 }

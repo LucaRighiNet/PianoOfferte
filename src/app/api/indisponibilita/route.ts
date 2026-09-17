@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { aDateUtc, confronta, eDataCivile, type DataCivile } from '@/lib/data/dataCivile';
 import { leggiCorpo, rispostaDaErrore } from '@/lib/server/risposte';
+import { richiediPermesso, richiediUtente } from '@/lib/auth/sessione';
+import { puoModificareImpostazioni } from '@/lib/auth/permessi';
 
 /**
  * Ferie, chiusure aziendali e carico non-offerta (M4, decisione D10).
@@ -41,6 +43,12 @@ export async function POST(richiesta: Request): Promise<NextResponse> {
   if (!letto.ok) return letto.risposta;
 
   try {
+    const utente = await richiediUtente();
+    richiediPermesso(
+      puoModificareImpostazioni(utente.ruolo),
+      'Solo il responsabile di divisione puo modificare il calendario',
+    );
+
     if (letto.dati.personaId !== null) {
       const persona = await db.persona.findUnique({ where: { id: letto.dati.personaId } });
       if (!persona) return NextResponse.json({ errore: 'Persona non trovata' }, { status: 404 });
