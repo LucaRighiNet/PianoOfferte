@@ -50,6 +50,7 @@ import { CodaDaAssegnare, type VoceCoda } from './CodaDaAssegnare';
 import { Legenda } from './Legenda';
 import { ModuloNuovaRdo } from './ModuloNuovaRdo';
 import { useTrascinamento, type EsitoRilascio, type OrigineGesto } from './useTrascinamento';
+import { useAnnulla, type Ripristino } from './useAnnulla';
 import { Avatar, Chip, GruppoSegmentato, Pulsante, Selettore } from './ui';
 
 const LARGHEZZA_GRIGLIA = 244;
@@ -101,6 +102,7 @@ export function Pianificatore({
   const [statiLocali, setStatiLocali] = useState<
     ReadonlyMap<string, { stato: StatoAttivitaMemorizzato; versione: number }>
   >(new Map());
+  const annulla = useAnnulla();
   const [mostraNuovaRdo, setMostraNuovaRdo] = useState(false);
   const [avviso, setAvviso] = useState<string | null>(null);
 
@@ -240,8 +242,9 @@ export function Pianificatore({
         offerte: offerteMappa,
         persone: personeVisibili,
         modo,
+        tutteLeAttivita: attivitaPianificate,
       }),
-    [attivitaFiltrate, offerteMappa, personeVisibili, modo],
+    [attivitaFiltrate, offerteMappa, personeVisibili, modo, attivitaPianificate],
   );
 
   const gruppiTroncati = modo !== 'RISORSA' && gruppi.length > MAX_GRUPPI_LEGGIBILI;
@@ -329,6 +332,16 @@ export function Pianificatore({
           new Map(m).set(attivita.id, { stato: corpo.stato, versione: corpo.versione }),
         );
         setSalvataggio({ tipo: 'SALVATO' });
+        annulla.registra({
+          attivitaId: attivita.id,
+          descrizione: `stato di ${attivita.tipoAttivita}`,
+          ripristino: {
+            tipo: 'STATO',
+            stato: statoPrecedente,
+            causaleBlocco: attivita.causaleBlocco,
+          },
+          versione: corpo.versione,
+        });
       } catch {
         setStatiLocali((m) =>
           new Map(m).set(attivita.id, { stato: statoPrecedente, versione: versionePrecedente }),
@@ -350,6 +363,13 @@ export function Pianificatore({
         corpo.personaId = bersaglio.personaId;
         corpo.dataInizio = bersaglio.giorno;
       }
+
+      const primaDi: Ripristino = {
+        tipo: 'PIANIFICAZIONE',
+        personaId: origine.personaIdPrecedente,
+        dataInizio: origine.dataInizio,
+        stimaOre: origine.stimaOre,
+      };
 
       setSalvataggio({ tipo: 'IN_CORSO' });
       try {
@@ -376,8 +396,18 @@ export function Pianificatore({
         const esito = (await risposta.json()) as {
           aggiornate: { id: string }[];
           problemi: { motivo: string }[];
+          versioni: Record<string, number>;
         };
         setSalvataggio({ tipo: 'SALVATO' });
+        const nuovaVersione = esito.versioni[origine.attivitaId];
+        if (nuovaVersione !== undefined) {
+          annulla.registra({
+            attivitaId: origine.attivitaId,
+            descrizione: origine.etichetta,
+            ripristino: primaDi,
+            versione: nuovaVersione,
+          });
+        }
         setAvviso(
           esito.problemi.length > 0
             ? `Catena interrotta: ${esito.problemi[0]?.motivo ?? ''}`
@@ -391,8 +421,65 @@ export function Pianificatore({
         setAvviso('Rete non raggiungibile: la modifica non e stata salvata');
       }
     },
-    [router],
+    [router, annulla],
   );
+
+  const eseguiAnnulla = useCallback(async () => {
+    const azione = annulla.ultima;
+    if (!azione) return;
+    annulla.rimuoviUltima();
+    setSalvataggio({ tipo: 'IN_CORSO' });
+
+    const { url, corpo } =
+      azione.ripristino.tipo === 'STATO'
+        ? {
+            url: `/api/attivita/${azione.attivitaId}/stato`,
+            corpo: {
+              stato: azione.ripristino.stato,
+              causaleBlocco: azione.ripristino.causaleBlocco,
+              versione: azione.versione,
+            },
+          }
+        : {
+            url: `/api/attivita/${azione.attivitaId}`,
+            corpo: {
+              versione: azione.versione,
+              personaId: azione.ripristino.personaId,
+              ...(azione.ripristino.personaId === null
+                ? {}
+                : {
+                    dataInizio: azione.ripristino.dataInizio,
+                    stimaOre: azione.ripristino.stimaOre,
+                  }),
+            },
+          };
+
+    try {
+      const risposta = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(corpo),
+      });
+      if (!risposta.ok) {
+        const messaggio =
+          risposta.status === 409
+            ? 'Non si puo annullare: la riga e stata modificata da qualcun altro'
+            : `Annullamento non riuscito (${risposta.status})`;
+        setSalvataggio({ tipo: 'ERRORE', messaggio });
+        setAvviso(messaggio);
+        annulla.svuota();
+        router.refresh();
+        return;
+      }
+      setSalvataggio({ tipo: 'SALVATO' });
+      setAvviso(`Annullato: ${azione.descrizione}`);
+      setStatiLocali(new Map());
+      router.refresh();
+    } catch {
+      setSalvataggio({ tipo: 'ERRORE', messaggio: 'Rete non raggiungibile' });
+      annulla.svuota();
+    }
+  }, [annulla, router]);
 
   const { stato: trascinamento, inizia: iniziaTrascinamento } = useTrascinamento({
     larghezzaGiorno: definizione.larghezzaGiorno,
@@ -439,6 +526,11 @@ export function Pianificatore({
   useEffect(() => {
     function suTasto(e: KeyboardEvent): void {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        void eseguiAnnulla();
+        return;
+      }
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         setMostraNuovaRdo(true);
@@ -458,7 +550,7 @@ export function Pianificatore({
     }
     window.addEventListener('keydown', suTasto);
     return () => window.removeEventListener('keydown', suTasto);
-  }, [attivitaSelezionata, cambiaStato]);
+  }, [attivitaSelezionata, cambiaStato, eseguiAnnulla]);
 
   const azzeraFiltri = useCallback(() => {
     setFiltroPersona('');
@@ -495,6 +587,18 @@ export function Pianificatore({
         >
           + Nuova RDO
         </button>
+
+        <Pulsante
+          onClick={() => void eseguiAnnulla()}
+          disabilitato={annulla.ultima === null}
+          titolo={
+            annulla.ultima === null
+              ? 'Niente da annullare'
+              : `Annulla: ${annulla.ultima.descrizione} (Ctrl+Z)`
+          }
+        >
+          ↶ Annulla
+        </Pulsante>
 
         <span className="mx-1 h-5 w-px" style={{ background: 'var(--bordo)' }} />
 
@@ -633,6 +737,7 @@ export function Pianificatore({
                     finestraDa={finestraDa}
                     finestraA={finestraA}
                     larghezzaGiorno={definizione.larghezzaGiorno}
+                    modo={modo}
                     calendario={calendario}
                     coloriTipo={coloriTipo}
                     allocazione={
@@ -677,6 +782,7 @@ export function Pianificatore({
                 attivitaId: voce.attivitaId,
                 versione: voce.versione,
                 dataInizio: null,
+                personaIdPrecedente: null,
                 stimaOre: voce.stimaOre,
                 etichetta: `${voce.offerta.descrizione} · ${voce.etichetta}`,
               },
@@ -854,6 +960,7 @@ function RigaGruppo({
   finestraDa,
   finestraA,
   larghezzaGiorno,
+  modo,
   calendario,
   coloriTipo,
   allocazione,
@@ -870,6 +977,7 @@ function RigaGruppo({
   finestraDa: DataCivile;
   finestraA: DataCivile;
   larghezzaGiorno: number;
+  modo: Raggruppamento;
   calendario: CalendarioLavorativo;
   coloriTipo: ReadonlyMap<string, string>;
   allocazione: ReadonlyMap<DataCivile, number> | undefined;
@@ -948,6 +1056,50 @@ function RigaGruppo({
     return tracciati;
   }, [impilate.elementi, dipendenze, finestraDa, finestraA, larghezzaGiorno]);
 
+  /**
+   * Testo della barra. Dipende dal raggruppamento, perche cio che il gruppo gia
+   * dichiara non va ripetuto sulla barra: nella corsia di una persona serve
+   * sapere di chi e il lavoro, nella banda di una offerta serve sapere che
+   * attivita e.
+   */
+  const etichettaDi = useCallback(
+    (cliente: string, descrizione: string, tipoAttivita: string): string => {
+      if (modo === 'OFFERTA') return tipoAttivita;
+      if (modo === 'CLIENTE') return descrizione;
+      return cliente === '' ? descrizione : `${cliente} · ${descrizione}`;
+    },
+    [modo],
+  );
+
+  /** Pixel liberi a destra di ogni barra, fino alla successiva della corsia. */
+  const spazioDestraPerBarra = useMemo(() => {
+    const perCorsia = new Map<number, { id: string; sinistra: number; destra: number }[]>();
+    for (const { elemento, corsia } of impilate.elementi) {
+      const c = collocaBarra(
+        finestraDa,
+        finestraA,
+        larghezzaGiorno,
+        elemento.inizio,
+        elemento.fine,
+      );
+      if (!c) continue;
+      const elenco = perCorsia.get(corsia) ?? [];
+      elenco.push({ id: elemento.id, sinistra: c.sinistra, destra: c.sinistra + c.larghezza });
+      perCorsia.set(corsia, elenco);
+    }
+
+    const larghezzaTotale = giorni.length * larghezzaGiorno;
+    const spazi = new Map<string, number>();
+    for (const elenco of perCorsia.values()) {
+      elenco.sort((a, b) => a.sinistra - b.sinistra);
+      elenco.forEach((barra, indice) => {
+        const successiva = elenco[indice + 1];
+        spazi.set(barra.id, (successiva?.sinistra ?? larghezzaTotale) - barra.destra);
+      });
+    }
+    return spazi;
+  }, [impilate.elementi, finestraDa, finestraA, larghezzaGiorno, giorni.length]);
+
   const numeroCorsie = Math.max(1, impilate.corsie);
   const altezzaTotale = (carico ? ALTEZZA_CAPACITA : 0) + numeroCorsie * ALTEZZA_CORSIA;
 
@@ -983,7 +1135,12 @@ function RigaGruppo({
 
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
           {gruppo.etichette.map((e) => (
-            <Chip key={e.testo} titolo={e.titolo}>
+            <Chip
+              key={e.testo}
+              titolo={e.titolo}
+              pieno={e.pieno ?? false}
+              colore={e.allarme === true ? 'var(--semaforo-rosso)' : undefined}
+            >
               {e.testo}
             </Chip>
           ))}
@@ -1076,7 +1233,12 @@ function RigaGruppo({
 
             const barra: DatiBarra = {
               id: a.id,
-              etichetta: a.tipoAttivita,
+              etichetta: etichettaDi(
+                offerta?.cliente ?? '',
+                offerta?.descrizione ?? '',
+                a.tipoAttivita,
+              ),
+              tipoAttivita: a.tipoAttivita,
               offertaCodice: offerta?.codice ?? '',
               offertaDescrizione: offerta?.descrizione ?? '',
               cliente: offerta?.cliente ?? '',
@@ -1103,6 +1265,7 @@ function RigaGruppo({
                 larghezzaGiorno={larghezzaGiorno}
                 altezza={ALTEZZA_BARRA}
                 alto={corsia * ALTEZZA_CORSIA + (ALTEZZA_CORSIA - ALTEZZA_BARRA) / 2}
+                spazioDestra={spazioDestraPerBarra.get(a.id) ?? 0}
                 selezionata={selezionata === a.id}
                 inMovimento={idInMovimento === a.id}
                 onSeleziona={onSeleziona}
@@ -1113,6 +1276,7 @@ function RigaGruppo({
                       attivitaId: a.id,
                       versione: a.versione,
                       dataInizio: inizio,
+                      personaIdPrecedente: a.personaId,
                       stimaOre: a.stimaOre,
                       etichetta: `${offerta?.descrizione ?? ''} · ${a.tipoAttivita}`,
                     },
@@ -1126,6 +1290,7 @@ function RigaGruppo({
                       attivitaId: a.id,
                       versione: a.versione,
                       dataInizio: inizio,
+                      personaIdPrecedente: a.personaId,
                       stimaOre: a.stimaOre,
                       etichetta: `${offerta?.descrizione ?? ''} · ${a.tipoAttivita}`,
                     },
@@ -1188,13 +1353,18 @@ function DettaglioSelezione({
         style={{ background: offerta?.colore ?? 'var(--accento)' }}
       />
       <div className="min-w-0">
-        <div className="truncate text-[12px] font-semibold">
-          {offerta?.descrizione ?? 'Offerta'} · {attivita.tipoAttivita}
+        {/* Cliente e offerta per primi e piu grandi: sono l'identita, il resto
+            e contorno. Era il difetto segnalato dal committente. */}
+        <div className="flex min-w-0 items-baseline gap-1.5">
+          <span className="shrink-0 text-[13px] font-semibold">{offerta?.cliente ?? '—'}</span>
+          <span className="truncate text-[13px]">{offerta?.descrizione ?? 'Offerta'}</span>
+          <span className="shrink-0 text-[11px]" style={{ color: 'var(--testo-debole)' }}>
+            {offerta?.codice ?? ''}
+          </span>
         </div>
         <div className="truncate text-[11px]" style={{ color: 'var(--testo-tenue)' }}>
-          {offerta?.cliente ?? '—'} · {offerta?.codice ?? '—'} ·{' '}
-          {persona ? `${persona.nome} ${persona.cognome}` : 'Non assegnata'} ·{' '}
-          {formatoOre(attivita.stimaOre)}
+          {attivita.tipoAttivita} · {formatoOre(attivita.stimaOre)} ·{' '}
+          {persona ? `${persona.nome} ${persona.cognome}` : 'Non assegnata'}
           {attivita.dataInizio && attivita.dataFine
             ? ` · ${formatoBreve(attivita.dataInizio)} — ${formatoBreve(attivita.dataFine)}`
             : ''}

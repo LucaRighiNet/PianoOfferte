@@ -23,6 +23,8 @@ export interface OrigineGesto {
   readonly versione: number;
   /** Inizio attuale della barra: assente per una richiesta ancora in coda. */
   readonly dataInizio: DataCivile | null;
+  /** Persona attualmente assegnata: serve per annullare il gesto. */
+  readonly personaIdPrecedente: string | null;
   readonly stimaOre: number;
   readonly etichetta: string;
 }

@@ -45,6 +45,67 @@ export class PianificazioneRifiutata extends Error {
   }
 }
 
+interface AttivitaAttuale {
+  readonly personaId: string | null;
+  readonly dataInizio: Date | null;
+  readonly dataFine: Date | null;
+}
+
+/**
+ * Riporta una attivita nella coda "Da assegnare": nessuna persona, nessuna
+ * data. I successori restano dove sono: disfare una assegnazione non deve
+ * spostare lavoro che qualcun altro ha gia in mano.
+ */
+async function disassegna(
+  attivitaId: string,
+  attuale: AttivitaAttuale,
+  utenteId: string | null,
+): Promise<EsitoPianificazione> {
+  const versioni: Record<string, number> = {};
+
+  await db.$transaction(async (tx) => {
+    const aggiornata = await tx.attivita.update({
+      where: { id: attivitaId },
+      data: {
+        personaId: null,
+        dataInizio: null,
+        dataFine: null,
+        versione: { increment: 1 },
+      },
+      select: { id: true, versione: true, offertaId: true },
+    });
+    versioni[aggiornata.id] = aggiornata.versione;
+
+    // Se non resta nessuna attivita assegnata, l'offerta torna da pianificare.
+    const ancoraAssegnate = await tx.attivita.count({
+      where: { offertaId: aggiornata.offertaId, personaId: { not: null } },
+    });
+    if (ancoraAssegnate === 0) {
+      await tx.offerta.updateMany({
+        where: { id: aggiornata.offertaId, stato: { in: ['PIANIFICATA', 'IN_LAVORAZIONE'] } },
+        data: { stato: 'DA_PIANIFICARE' },
+      });
+    }
+
+    await tx.eventoAudit.create({
+      data: {
+        entita: 'Attivita',
+        entitaId: attivitaId,
+        utenteId,
+        azione: 'DISASSEGNAZIONE',
+        prima: {
+          personaId: attuale.personaId,
+          dataInizio: attuale.dataInizio?.toISOString() ?? null,
+          dataFine: attuale.dataFine?.toISOString() ?? null,
+        },
+        dopo: { personaId: null },
+      },
+    });
+  });
+
+  return { aggiornate: [], problemi: [], versioni };
+}
+
 /** Costruisce il calendario dai dati correnti di persone e indisponibilita. */
 export async function caricaCalendario(): Promise<CalendarioLavorativo> {
   const [persone, indisponibilita] = await Promise.all([
@@ -127,8 +188,13 @@ export async function caricaSuccessori(attivitaId: string): Promise<AnelloCatena
 export interface RichiestaPianificazione {
   readonly attivitaId: string;
   readonly versione: number;
-  /** Nuova persona assegnata. `undefined` lascia quella attuale. */
-  readonly personaId?: string;
+  /**
+   * Nuova persona assegnata. `undefined` lascia quella attuale.
+   * `null` disfa l'assegnazione: l'attivita torna nella coda "Da assegnare"
+   * e perde le date. Serve per annullare un rilascio sbagliato e, da solo,
+   * per togliere di mano un lavoro assegnato alla persona sbagliata.
+   */
+  readonly personaId?: string | null;
   /** Nuovo inizio richiesto. `undefined` lascia quello attuale. */
   readonly dataInizio?: DataCivile;
   /** Nuova stima in ore. `undefined` lascia quella attuale. */
@@ -173,6 +239,11 @@ export async function pianificaAttivita(
   });
   if (!attuale) throw new AttivitaInesistente(richiesta.attivitaId);
   if (attuale.versione !== richiesta.versione) throw new ConflittoDiVersione(attuale.versione);
+
+  // Disassegnazione esplicita: nessun calcolo di calendario, si torna in coda.
+  if (richiesta.personaId === null) {
+    return disassegna(attuale.id, attuale, richiesta.utenteId ?? null);
+  }
 
   const personaId = richiesta.personaId ?? attuale.personaId;
   if (personaId === null) {

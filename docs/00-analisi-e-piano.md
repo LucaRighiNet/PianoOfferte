@@ -764,6 +764,9 @@ confermate o corrette quando i dati reali saranno disponibili.
 | 15.2.11 | La dashboard usa una griglia per il carico, tabelle per gli elenchi e una cifra guida per i tempi | Il lavoro del lettore decide la forma. Un istogramma per i tempi sarebbe stato un grafico a una barra: il numero e il grafico |
 | 15.2.12 | Una revisione crea una attivita agganciata all'ultima, alla stessa persona, e riporta l'offerta in revisione | Chi ha fatto l'offerta e chi puo rivederla in meno tempo. L'offerta esce dal campione del tempo di preparazione finche non e riconsegnata: l'orologio riparte, ed e corretto che sia cosi |
 | 15.2.13 | Il consuntivo ore (S4) NON viene costruito finche non esistono informativa e regolamento art. 4 | E' l'unica funzione che misura a posteriori la prestazione individuale. Costruirla e lasciarla spenta sarebbe stato piu comodo, ma la tentazione di accenderla senza copertura e reale. Vedi par. 14.1 |
+| 15.2.14 | Il TESTO della barra porta cliente e descrizione dell'offerta, non il tipo di attivita | Segnalazione del committente, e aveva ragione: il tipo e gia codificato dal colore, quindi scriverlo era una ripetizione, e nella vista per risorsa l'identita dell'offerta spariva dentro il tooltip. Ora si legge a colpo d'occhio di chi e il lavoro |
+| 15.2.15 | Quando la barra e troppo stretta l'etichetta esce a destra, ma solo se c'e spazio libero fino alla barra successiva | Un'etichetta sovrapposta a un'altra barra e peggio di nessuna etichetta. Con barre da mezza giornata a 22 pixel al giorno, il testo dentro non ci sta mai |
+| 15.2.16 | Disfare una assegnazione riporta l'attivita in coda senza toccare i successori | Serve per annullare un rilascio sbagliato, e da solo per togliere un lavoro dalle mani sbagliate. Spostare anche i successori significherebbe muovere lavoro che qualcun altro ha gia in mano |
 
 ### 15.3 Cosa resta scoperto e va deciso dal committente
 

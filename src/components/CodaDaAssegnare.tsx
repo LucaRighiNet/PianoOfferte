@@ -106,12 +106,14 @@ export function CodaDaAssegnare({
                         className="mt-[5px] h-2 w-2 shrink-0 rounded-full"
                         style={{ background: v.offerta.colore }}
                       />
-                      <span className="flex-1 truncate text-[12px] font-medium">
+                      <span className="flex-1 truncate text-[12px] font-semibold">
                         {v.offerta.descrizione}
                       </span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
-                      <Chip titolo={`Cliente: ${v.offerta.cliente}`}>{v.offerta.cliente}</Chip>
+                      <Chip titolo={`Cliente: ${v.offerta.cliente}`} pieno>
+                        {v.offerta.cliente}
+                      </Chip>
                       {v.offerta.kamIniziali ? (
                         <Avatar
                           iniziali={v.offerta.kamIniziali}

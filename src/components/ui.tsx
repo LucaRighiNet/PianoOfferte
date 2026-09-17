@@ -6,19 +6,31 @@ export function Chip({
   children,
   titolo,
   colore,
+  pieno = false,
 }: {
   children: ReactNode;
   titolo?: string;
   colore?: string;
+  /** Riempita: per l'informazione che va letta per prima, come il cliente. */
+  pieno?: boolean;
 }) {
   return (
     <span
       title={titolo}
       className="inline-flex max-w-[11rem] items-center gap-1 truncate rounded-full border px-2 py-[1px] text-[11px] leading-[16px]"
-      style={{
-        borderColor: colore ?? 'var(--bordo-forte)',
-        color: colore ?? 'var(--testo-tenue)',
-      }}
+      style={
+        pieno
+          ? {
+              background: 'var(--sfondo-hover)',
+              borderColor: 'var(--bordo-forte)',
+              color: 'var(--testo)',
+              fontWeight: 600,
+            }
+          : {
+              borderColor: colore ?? 'var(--bordo-forte)',
+              color: colore ?? 'var(--testo-tenue)',
+            }
+      }
     >
       {children}
     </span>

@@ -197,6 +197,18 @@ if (posizionePrima) {
   spostamentoRiuscito = indicatore === 'Salvato';
 }
 
+// --- Annulla (par. 8.3) ---------------------------------------------------
+// Dopo lo spostamento la pila non e vuota: si annulla e la barra deve tornare.
+let annullaFunziona = false;
+const pulsanteAnnulla = pagina.locator('button', { hasText: 'Annulla' }).first();
+if ((await pulsanteAnnulla.isEnabled().catch(() => false)) === true) {
+  await pulsanteAnnulla.click();
+  await pagina.waitForTimeout(2000);
+  const avvisoAnnulla =
+    (await pagina.locator('[data-prova="avviso"]').textContent().catch(() => '')) ?? '';
+  annullaFunziona = avvisoAnnulla.startsWith('Annullato');
+}
+
 // --- Revisione offerta (S2) ----------------------------------------------
 let revisioneAperta = false;
 const barraPerRevisione = pagina.locator('[data-corsia-persona] button[aria-label]').nth(6);
@@ -306,6 +318,7 @@ if (!assegnazioneRiuscita) {
   problemi.push('il trascinamento dalla coda non ha assegnato la richiesta');
 }
 if (!spostamentoRiuscito) problemi.push('lo spostamento di una barra non ha confermato il salvataggio');
+if (!annullaFunziona) problemi.push('l annullamento dell ultima azione non ha dato riscontro');
 if (!revisioneAperta) problemi.push('l apertura di una revisione non ha dato riscontro');
 if (righePersone === 0) problemi.push('la schermata Impostazioni non elenca le persone');
 if (!capacitaSalvata) problemi.push('la modifica della capacita non ha confermato il salvataggio');
@@ -332,6 +345,7 @@ const esito = {
   avvisoCreazione: (avvisoCreazione ?? '').trim().slice(0, 80),
   assegnazioneRiuscita,
   spostamentoRiuscito,
+  annullaFunziona,
   revisioneAperta,
   impostazioni: { righePersone, capacitaSalvata, assenzePrima, assenzeDopo, assenzaEliminata },
   dashboard: { indicatori: cifreDashboard.length, vistaTabellare, massimoCarico },

@@ -14,7 +14,7 @@ import { leggiCorpo, rispostaDaErrore } from '@/lib/server/risposte';
 const Corpo = z
   .object({
     versione: z.number().int().nonnegative(),
-    personaId: z.string().min(1).optional(),
+    personaId: z.string().min(1).nullable().optional(),
     dataInizio: z
       .string()
       .refine(eDataCivile, { message: 'Formato data atteso YYYY-MM-DD' })

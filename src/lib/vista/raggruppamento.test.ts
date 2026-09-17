@@ -158,3 +158,75 @@ describe('raggruppamento per cliente e KAM', () => {
     expect(g).toEqual([]);
   });
 });
+
+describe('indicatore del lavoro in corso', () => {
+  function att2(id: string, p: Partial<AttivitaVista> = {}): AttivitaVista {
+    return attivita(id, p);
+  }
+
+  it('non mostra nulla se il limite non e superato', () => {
+    const g = costruisciGruppi({
+      attivita: [],
+      offerte: new Map([['o1', offerta('o1')]]),
+      persone: PERSONE,
+      modo: 'RISORSA',
+      tutteLeAttivita: [att2('a1', { stato: 'IN_CORSO' })],
+    });
+    expect(g[0]?.etichette).toHaveLength(1);
+  });
+
+  it('segnala il superamento contando in corso e bloccate', () => {
+    // PERSONE[0] ha limiteWip 5: sei aperte lo superano.
+    const aperte = [
+      att2('a1', { stato: 'IN_CORSO' }),
+      att2('a2', { stato: 'IN_CORSO' }),
+      att2('a3', { stato: 'BLOCCATA' }),
+      att2('a4', { stato: 'IN_CORSO' }),
+      att2('a5', { stato: 'BLOCCATA' }),
+      att2('a6', { stato: 'IN_CORSO' }),
+    ];
+    const g = costruisciGruppi({
+      attivita: [],
+      offerte: new Map([['o1', offerta('o1')]]),
+      persone: PERSONE,
+      modo: 'RISORSA',
+      tutteLeAttivita: aperte,
+    });
+    const allarme = g[0]?.etichette.find((e) => e.allarme === true);
+    expect(allarme?.testo).toBe('WIP 6/5');
+  });
+
+  it('non conta le completate ne le non iniziate', () => {
+    const g = costruisciGruppi({
+      attivita: [],
+      offerte: new Map([['o1', offerta('o1')]]),
+      persone: PERSONE,
+      modo: 'RISORSA',
+      tutteLeAttivita: [
+        att2('a1', { stato: 'COMPLETATA' }),
+        att2('a2', { stato: 'NON_INIZIATA' }),
+        att2('a3', { stato: 'COMPLETATA' }),
+        att2('a4', { stato: 'COMPLETATA' }),
+        att2('a5', { stato: 'COMPLETATA' }),
+        att2('a6', { stato: 'COMPLETATA' }),
+        att2('a7', { stato: 'COMPLETATA' }),
+      ],
+    });
+    expect(g[0]?.etichette.some((e) => e.allarme === true)).toBe(false);
+  });
+
+  it('conta sul lavoro totale, non su quello filtrato', () => {
+    // Il conteggio non deve dipendere da cosa e visibile a schermo.
+    const aperte = Array.from({ length: 6 }, (_, i) =>
+      att2(`a${i}`, { stato: 'IN_CORSO' }),
+    );
+    const g = costruisciGruppi({
+      attivita: [],
+      offerte: new Map([['o1', offerta('o1')]]),
+      persone: PERSONE,
+      modo: 'RISORSA',
+      tutteLeAttivita: aperte,
+    });
+    expect(g[0]?.etichette.some((e) => e.allarme === true)).toBe(true);
+  });
+});

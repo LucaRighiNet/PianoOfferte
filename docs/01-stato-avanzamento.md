@@ -25,9 +25,12 @@ Riferimento: `docs/00-analisi-e-piano.md`. Aggiornato al 17 settembre 2026.
 | 14.8 | Autosave con tre stati e rollback visibile | Fatto | Indicatore Salvato / In corso / Non salvato |
 | S1 | Dashboard direzionale a quattro riquadri | Fatto | 25 test sulle metriche; verifica end-to-end su indicatori, griglia e vista tabellare |
 | S5 | Limite WIP con evidenza di superamento | Fatto | Visibile in dashboard e in Impostazioni |
+| 8.3 | Annulla delle ultime azioni di pianificazione, con Ctrl+Z | Fatto | Verifica end-to-end; pila di dieci azioni, ognuna con il proprio controllo di concorrenza |
+| S5 | Limite WIP segnalato sulla corsia della persona | Fatto | 4 test; conteggio sul lavoro totale, non su quello filtrato |
+| 15.2.14 | Cliente e descrizione dell'offerta leggibili sulla barra | Fatto | Etichetta dentro o fuori la barra secondo lo spazio |
 | S2 | Revisioni offerta | Fatto | Nuova attivita agganciata all'ultima, stessa persona, offerta riportata in revisione; quota di revisioni in dashboard |
 
-Test unitari: 185 su 10 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
+Test unitari: 189 su 10 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
 
 ## Soglie prestazionali, ultima misura
 
@@ -60,6 +63,8 @@ si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
 | Il bilanciamento del seed distribuiva per ore assolute, non in rapporto alla capacita | Zoli Chiara all'827% | Bilanciamento sulla saturazione, non sulle ore |
 | Carico non-offerta che azzerava la capacita di una persona | Analisi della causa dello slittamento | Il seed lascia sempre almeno un'ora al giorno |
 | Due `void` per zittire variabili inutilizzate | Rilettura | Import e variabile rimossi |
+| Il testo della barra ripeteva il tipo di attivita, gia codificato dal colore, e l'identita dell'offerta spariva | Segnalazione del committente | Il testo porta cliente e descrizione; il tipo resta nel tooltip |
+| Una pila di annullamento che leggeva lo stato dentro un aggiornatore di React | Rilettura prima dell'uso | Chi annulla legge la cima della pila e poi la rimuove |
 
 ## Cosa manca
 
@@ -68,7 +73,6 @@ si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
 | Autenticazione Entra ID e ruoli | Dipende da D5. L'audit registra gia un campo utente, oggi nullo |
 | Notifiche Teams e Outlook (S3) | Taglio 3 |
 | Consuntivo ore (S4) | Taglio 3. E' la funzione piu esposta all'art. 4: va rilasciata con l'informativa |
-| Limiti WIP sulla timeline (S5) | Segnalato in dashboard e Impostazioni, non ancora sulla corsia della persona |
 | Virtualizzazione verticale | Non ancora necessaria: la vista per risorsa ha 12 righe, le altre sono limitate a 40 gruppi |
 | Modifica dei template dei tipi di offerta | Scelta consapevole, par. 15.2.7 |
 

@@ -13,6 +13,10 @@ import type { Raggruppamento } from './zoom';
 export interface EtichettaGruppo {
   readonly testo: string;
   readonly titolo: string;
+  /** Riempita: l'informazione che va letta per prima, come il cliente. */
+  readonly pieno?: boolean;
+  /** In allarme: una soglia superata, non una semplice informazione. */
+  readonly allarme?: boolean;
 }
 
 export interface Gruppo {
@@ -32,6 +36,30 @@ export interface IngressoRaggruppamento {
   readonly offerte: ReadonlyMap<string, OffertaVista>;
   readonly persone: readonly PersonaVista[];
   readonly modo: Raggruppamento;
+  /**
+   * Tutte le attivita pianificate, non solo quelle che superano i filtri.
+   * Serve a contare il lavoro in corso: un conteggio filtrato non e un limite.
+   */
+  readonly tutteLeAttivita?: readonly AttivitaVista[];
+}
+
+function etichettePersona(p: PersonaVista, aperte: number): readonly EtichettaGruppo[] {
+  const etichette: EtichettaGruppo[] = [
+    {
+      testo: `${p.capacitaOreGiorno} h/g`,
+      titolo: `Capacita giornaliera dedicata alle offerte: ${p.capacitaOreGiorno} ore${
+        p.percentualeContratto === 100 ? '' : ` (contratto ${p.percentualeContratto}%)`
+      }`,
+    },
+  ];
+  if (aperte > p.limiteWip) {
+    etichette.push({
+      testo: `WIP ${aperte}/${p.limiteWip}`,
+      titolo: `${aperte} attivita aperte contemporaneamente, oltre il limite di ${p.limiteWip} impostato per questa persona`,
+      allarme: true,
+    });
+  }
+  return etichette;
 }
 
 function primoInizio(attivita: readonly AttivitaVista[]): DataCivile | null {
@@ -63,9 +91,22 @@ export function costruisciGruppi({
   offerte,
   persone,
   modo,
+  tutteLeAttivita,
 }: IngressoRaggruppamento): readonly Gruppo[] {
   if (modo === 'RISORSA') {
     const perPersona = perChiave(attivita, (a) => a.personaId);
+
+    /*
+     * Lavoro in corso per persona (S5). Si conta su TUTTE le attivita caricate,
+     * non solo su quelle filtrate: un limite calcolato su meta del lavoro non e
+     * un limite. Per lo stesso motivo del par. 15.2.8 sulla saturazione.
+     */
+    const aperte = new Map<string, number>();
+    for (const a of tutteLeAttivita ?? attivita) {
+      if (a.personaId === null) continue;
+      if (a.stato !== 'IN_CORSO' && a.stato !== 'BLOCCATA') continue;
+      aperte.set(a.personaId, (aperte.get(a.personaId) ?? 0) + 1);
+    }
     // Tutte le persone attive compaiono, anche quelle senza lavoro: vedere chi
     // e libero e il motivo per cui esiste questa vista.
     return persone.map((p) => ({
@@ -75,14 +116,7 @@ export function costruisciGruppi({
       colore: p.colore,
       personaId: p.id,
       avatar: { iniziali: p.iniziali, colore: p.colore, titolo: `${p.nome} ${p.cognome}` },
-      etichette: [
-        {
-          testo: `${p.capacitaOreGiorno} h/g`,
-          titolo: `Capacita giornaliera dedicata alle offerte: ${p.capacitaOreGiorno} ore${
-            p.percentualeContratto === 100 ? '' : ` (contratto ${p.percentualeContratto}%)`
-          }`,
-        },
-      ],
+      etichette: etichettePersona(p, aperte.get(p.id) ?? 0),
       attivita: perPersona.get(p.id) ?? [],
     }));
   }
@@ -103,7 +137,7 @@ export function costruisciGruppi({
           ? { iniziali: o.kamIniziali, colore: 'var(--testo-debole)', titolo: `KAM: ${o.kam ?? ''}` }
           : null,
         etichette: [
-          { testo: o.cliente, titolo: `Cliente: ${o.cliente}` },
+          { testo: o.cliente, titolo: `Cliente: ${o.cliente}`, pieno: true },
           { testo: `${elenco.length} att.`, titolo: `${elenco.length} attivita` },
         ],
         attivita: elenco,
