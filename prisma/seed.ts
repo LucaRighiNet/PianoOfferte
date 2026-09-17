@@ -15,6 +15,7 @@ import {
   daIstante,
   dataCivile,
   aDateUtc,
+  differenzaGiorni,
   type DataCivile,
 } from '../src/lib/data/dataCivile.js';
 import {
@@ -270,14 +271,21 @@ async function main(): Promise<void> {
         descrizione: 'Ferie',
       });
     }
-    // Carico non-offerta ricorrente per alcuni: risponde alla decisione D10.
-    if (random() < 0.4) {
+    /*
+     * Carico non-offerta ricorrente per alcuni: risponde alla decisione D10.
+     * Non puo assorbire tutta la capacita: una persona a zero ore non e un dato
+     * realistico, e il pianificatore giustamente si rifiuta di assegnarle
+     * lavoro. Si lascia sempre almeno un'ora al giorno.
+     */
+    const capacitaNetta = (Number(persona.capacitaOreGiorno) * persona.percentualeContratto) / 100;
+    const massimoNonOfferta = Math.floor(capacitaNetta) - 1;
+    if (random() < 0.4 && massimoNonOfferta >= 1) {
       indisponibilitaDati.push({
         personaId: persona.id,
         dataInizio: INIZIO_PERIODO,
         dataFine: FINE_PERIODO,
         tipo: 'CARICO_NON_OFFERTA',
-        oreGiorno: interoTra(1, 3),
+        oreGiorno: interoTra(1, Math.min(3, massimoNonOfferta)),
         descrizione: 'Attivita di commessa e assistenza',
       });
     }
@@ -308,8 +316,42 @@ async function main(): Promise<void> {
   }));
   const calendario = new CalendarioLavorativo(capacita, voci);
 
-  // Offerte e attivita
-  const NUMERO_OFFERTE = 780;
+  /*
+   * Volume: con 9-10 operatori e circa 7 ore utili al giorno la capacita annua
+   * e nell'ordine delle 14.000 ore. A circa 25 ore per offerta, 520 offerte
+   * portano la saturazione media intorno al 75-85%, cioe la fascia che il piano
+   * definisce sana. Con 780 offerte la domanda superava la capacita del 35% e
+   * ogni persona risultava sovraccarica: dati di prova che non assomigliano a
+   * nessuna divisione reale.
+   */
+  const NUMERO_OFFERTE = 520;
+  const oreAssegnate = new Map<string, number>(operatori.map((o) => [o.id, 0]));
+  // Capacita giornaliera netta, gia al netto del carico non-offerta ricorrente.
+  const capacitaGiornaliera = new Map<string, number>(
+    operatori.map((o) => {
+      const lorda = (Number(o.capacitaOreGiorno) * o.percentualeContratto) / 100;
+      const nonOfferta = indisponibilitaDati
+        .filter((i) => i.personaId === o.id && i.tipo === 'CARICO_NON_OFFERTA')
+        .reduce((somma, i) => somma + (i.oreGiorno ?? 0), 0);
+      return [o.id, Math.max(0.5, lorda - nonOfferta)];
+    }),
+  );
+
+  /**
+   * Sceglie fra tre operatori a caso il meno carico IN RAPPORTO ALLA SUA
+   * CAPACITA. Bilanciare sulle ore assolute e sbagliato: chi ha un'ora al
+   * giorno risulta sempre il meno carico e finisce all'800%.
+   */
+  function scegliOperatore(): (typeof operatori)[number] {
+    const saturazione = (id: string): number =>
+      (oreAssegnate.get(id) ?? 0) / (capacitaGiornaliera.get(id) ?? 1);
+    let migliore = scegli(operatori);
+    for (let tentativo = 0; tentativo < 2; tentativo += 1) {
+      const sfidante = scegli(operatori);
+      if (saturazione(sfidante.id) < saturazione(migliore.id)) migliore = sfidante;
+    }
+    return migliore;
+  }
   let createOfferte = 0;
   let createAttivita = 0;
   let saltate = 0;
@@ -339,7 +381,7 @@ async function main(): Promise<void> {
       for (const [indice, riga] of tipo.righe.entries()) {
         const tipoAtt = tipoAttivitaPerNome.get(riga.tipo);
         if (!tipoAtt) throw new Error(`Tipo attivita mancante: ${riga.tipo}`);
-        const persona = scegli(operatori);
+        const persona = scegliOperatore();
         const ore = riga.ore * (0.75 + random() * 0.7); // variabilita realistica
         try {
           const p = calendario.espandiDurata(persona.id, cursore, Math.round(ore * 2) / 2);
@@ -351,6 +393,10 @@ async function main(): Promise<void> {
             dataFine: p.dataFine,
             ordine: indice,
           });
+          oreAssegnate.set(
+            persona.id,
+            (oreAssegnate.get(persona.id) ?? 0) + Math.round(ore * 2) / 2,
+          );
           cursore = aggiungiGiorni(p.dataFine, 1);
         } catch {
           pianificabile = false;
@@ -446,6 +492,16 @@ async function main(): Promise<void> {
     }
   }
 
+  const oreTotali = [...oreAssegnate.values()].reduce((a, b) => a + b, 0);
+  const capacitaTotale = operatori.reduce(
+    (somma, o) =>
+      somma +
+      ((Number(o.capacitaOreGiorno) * o.percentualeContratto) / 100) *
+        // Giorni lavorativi approssimati nel periodo simulato.
+        Math.round(differenzaGiorni(FINE_PERIODO, INIZIO_PERIODO) * (5 / 7)),
+    0,
+  );
+
   const conteggi = {
     persone: await db.persona.count(),
     clienti: await db.cliente.count(),
@@ -454,6 +510,8 @@ async function main(): Promise<void> {
     dipendenze: await db.dipendenza.count(),
     indisponibilita: await db.indisponibilita.count(),
     saltatePerCalendario: saltate,
+    saturazioneMediaPercento:
+      capacitaTotale === 0 ? null : Math.round((oreTotali / capacitaTotale) * 100),
   };
   console.warn('Seed completato:', conteggi);
 }
@@ -475,8 +533,15 @@ function determinaStato(daAssegnare: boolean, dataFine: DataCivile | null): Stat
 
 function determinaStatoAttivita(inizio: DataCivile, fine: DataCivile): 'NON_INIZIATA' | 'IN_CORSO' | 'BLOCCATA' | 'COMPLETATA' {
   if (fine < OGGI) {
-    // Una piccola quota resta indietro: sono le righe "In ritardo" del beta.
-    return random() < 0.92 ? 'COMPLETATA' : random() < 0.5 ? 'IN_CORSO' : 'BLOCCATA';
+    /*
+     * Una piccola quota resta indietro: sono le righe "In ritardo" del beta.
+     * Solo fra le attivita finite di recente, pero: una attivita "in corso" da
+     * sei mesi non e un ritardo, e un dato dimenticato, e falsava l'anzianita
+     * del lavoro in corso nella dashboard.
+     */
+    const recente = differenzaGiorni(OGGI, fine) <= 30;
+    if (!recente) return 'COMPLETATA';
+    return random() < 0.8 ? 'COMPLETATA' : random() < 0.5 ? 'IN_CORSO' : 'BLOCCATA';
   }
   if (inizio <= OGGI) return random() < 0.8 ? 'IN_CORSO' : 'BLOCCATA';
   return 'NON_INIZIATA';

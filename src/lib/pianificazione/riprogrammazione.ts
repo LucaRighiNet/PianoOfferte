@@ -1,4 +1,9 @@
-import { aggiungiGiorni, confronta, type DataCivile } from '@/lib/data/dataCivile';
+import {
+  aggiungiGiorni,
+  confronta,
+  differenzaGiorni,
+  type DataCivile,
+} from '@/lib/data/dataCivile';
 import { CalendarioLavorativo } from '@/lib/calendario/calendarioLavorativo';
 
 /**
@@ -41,6 +46,18 @@ export interface EsitoRiprogrammazione {
 
 /** Oltre questo stacco non ha senso conservare il margine: si tratta come slegato. */
 const MARGINE_MASSIMO_GIORNI = 60;
+
+/**
+ * Scostamento massimo, in giorni di calendario, fra la data in cui il
+ * pianificatore rilascia una attivita e quella in cui finisce davvero.
+ *
+ * Serve a impedire un comportamento silenzioso e sbagliato: se una risorsa non
+ * ha capacita netta (per esempio perche il suo carico non-offerta assorbe tutte
+ * le ore), l'espansione della durata trova il primo giorno utile anche se e fra
+ * dieci mesi, e il lavoro sparisce dalla vista senza che nessuno se ne accorga.
+ * Oltre questa soglia non e piu pianificazione: e occultamento, e va detto.
+ */
+export const SCOSTAMENTO_MASSIMO_GIORNI = 45;
 
 /** Giorni lavorativi strettamente compresi fra `fine` e `inizioSuccessivo`. */
 function margineLavorativo(
@@ -92,6 +109,7 @@ export function riprogrammaCatena(
   radice: RadiceRiprogrammazione,
   inizioRichiesto: DataCivile,
   successori: readonly AnelloCatena[],
+  scostamentoMassimoGiorni: number = SCOSTAMENTO_MASSIMO_GIORNI,
 ): EsitoRiprogrammazione {
   const aggiornate: AnelloRiprogrammato[] = [];
   const problemi: ProblemaRiprogrammazione[] = [];
@@ -102,6 +120,16 @@ export function riprogrammaCatena(
 
   try {
     const p = calendario.espandiDurata(radice.personaId, inizioRichiesto, radice.stimaOre);
+
+    const scostamento = differenzaGiorni(p.dataInizio, inizioRichiesto);
+    if (scostamento > scostamentoMassimoGiorni) {
+      problemi.push({
+        id: radice.id,
+        motivo: `Questa risorsa non ha capacita disponibile prima del ${p.dataInizio}: verifica ferie, chiusure o carico non-offerta prima di assegnarla`,
+      });
+      return { aggiornate: [], problemi };
+    }
+
     aggiornate.push({
       id: radice.id,
       personaId: radice.personaId,

@@ -20,7 +20,11 @@ npm run db:seed             # dati di prova a volume realistico
 npm run dev
 ```
 
-L'applicazione risponde su http://localhost:3000/pianificazione
+L'applicazione risponde su:
+
+- http://localhost:3000/pianificazione - timeline, carico e coda
+- http://localhost:3000/dashboard - indicatori direzionali
+- http://localhost:3000/impostazioni - capacita, calendario, stime
 
 ## Comandi
 
@@ -75,6 +79,12 @@ Derivano dai capitoli 5.4 e 14 del piano.
 6. Le modifiche concorrenti passano dal controllo di versione ottimistico.
    Un conflitto si segnala, non si sovrascrive.
 7. Una funzione vuota e un errore di lint, non una svista.
+8. Le date non arrivano mai dal client: il client dichiara l'intenzione (chi, da
+   quando), il server calcola con il calendario reale.
+9. Nessuna collocazione silenziosa: se una risorsa non ha capacita entro 45
+   giorni dalla data richiesta, l'operazione viene rifiutata con il motivo.
+10. Un colore di stato non porta mai il significato da solo: accanto c'e sempre
+    un numero o un'etichetta, e per il carico esiste una vista tabellare.
 
 ## Soglie prestazionali
 
@@ -84,7 +94,8 @@ Verificate da `npm run verifica:ui` (par. 7.3 del piano).
 |---|---|---|
 | Primo caricamento utile | sotto 1500 ms | circa 1150 ms |
 | Cambio filtro o raggruppamento | sotto 150 ms | circa 50 ms |
-| Barre visibili raggiungibili al click | 100% | 108 su 108 |
+| Barre visibili raggiungibili al click | 100% | 91 su 91 |
+| Carico massimo mostrato sui dati di prova | sotto 500% | 259% |
 
 ## Conformita
 

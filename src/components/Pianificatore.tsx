@@ -760,6 +760,17 @@ function Intestazione({
       <div className="ml-auto flex items-center gap-3">
         <IndicatoreSalvataggio stato={salvataggio} />
         <Link
+          href="/dashboard"
+          className="inline-flex h-7 items-center rounded-md border px-2.5 text-[12px] font-medium"
+          style={{
+            background: 'var(--sfondo-pannello)',
+            borderColor: 'var(--bordo)',
+            color: 'var(--testo)',
+          }}
+        >
+          Dashboard
+        </Link>
+        <Link
           href="/impostazioni"
           className="inline-flex h-7 items-center rounded-md border px-2.5 text-[12px] font-medium"
           style={{

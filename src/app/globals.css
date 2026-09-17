@@ -26,11 +26,15 @@
   --accento-tenue: #ccfbf1;
 
   /* Fasce di carico, par. 6 del piano */
+  /* Stati di carico. Verde, ambra e rosso sono i tre passi di stato del
+     palette di riferimento: superano separazione CVD e soglia a visione
+     normale. L'ambra resta sotto 3:1 su bianco, quindi ogni marca ambra porta
+     sempre un'etichetta o un numero visibile, mai il solo colore. */
   --carico-non-lavorativo: #e7eaef;
-  --carico-scarico: #dbe4ee;
-  --carico-sano: #86c99b;
-  --carico-pieno: #f0c05a;
-  --carico-sovraccarico: #e5736b;
+  --carico-scarico: #cfd8e3;
+  --carico-sano: #0ca30c;
+  --carico-pieno: #fab219;
+  --carico-sovraccarico: #d03b3b;
 
   /* Semafori di margine sulla scadenza */
   --semaforo-verde: #16a34a;
@@ -65,9 +69,9 @@
 
   --carico-non-lavorativo: #1e2633;
   --carico-scarico: #2b3647;
-  --carico-sano: #3f8f5c;
-  --carico-pieno: #b5852c;
-  --carico-sovraccarico: #b4453d;
+  --carico-sano: #0ca30c;
+  --carico-pieno: #fab219;
+  --carico-sovraccarico: #d03b3b;
 
   --semaforo-verde: #4ade80;
   --semaforo-ambra: #fbbf24;

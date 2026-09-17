@@ -241,6 +241,32 @@ if ((await rigaProva.count()) > 0) {
 }
 await scatta('impostazioni');
 
+// --- Dashboard (S1) -------------------------------------------------------
+await pagina.goto('http://localhost:3000/dashboard', { waitUntil: 'networkidle' });
+const cifreDashboard = await pagina.evaluate(() =>
+  [...globalThis.document.querySelectorAll('main > div:first-child > div')].map((d) =>
+    (d.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60),
+  ),
+);
+const righeCarico = await pagina.locator('table tbody tr').first().locator('td').count();
+
+// La vista tabellare e il rimedio obbligato per i colori di stato sotto 3:1:
+// se manca, il colore porterebbe il significato da solo.
+await pagina.locator('button', { hasText: 'Tabella' }).click();
+await pagina.waitForTimeout(300);
+const vistaTabellare = (await pagina.locator('text=allocate / disponibili').count()) > 0;
+await scatta('dashboard');
+
+// Nessuna percentuale assurda: se compare, i dati o il calcolo sono sbagliati.
+await pagina.locator('button', { hasText: 'Griglia' }).click();
+await pagina.waitForTimeout(300);
+const percentuali = await pagina.evaluate(() =>
+  [...globalThis.document.querySelectorAll('table tbody td div')]
+    .map((d) => Number((d.textContent ?? '').replace('%', '')))
+    .filter((n) => Number.isFinite(n)),
+);
+const massimoCarico = percentuali.length === 0 ? 0 : Math.max(...percentuali);
+
 await browser.close();
 
 if (msCaricamento > SOGLIA_CARICAMENTO_MS) {
@@ -270,6 +296,15 @@ if (!capacitaSalvata) problemi.push('la modifica della capacita non ha confermat
 if (assenzeDopo <= assenzePrima) problemi.push('l inserimento di una assenza non ha aggiunto righe');
 else if (!assenzaEliminata) problemi.push('l eliminazione di una assenza non ha rimosso la riga');
 
+if (cifreDashboard.length !== 4) problemi.push('la dashboard non mostra quattro indicatori');
+if (righeCarico === 0) problemi.push('la griglia di carico e vuota');
+if (!vistaTabellare) {
+  problemi.push('manca la vista tabellare del carico, richiesta dai colori di stato');
+}
+if (massimoCarico > 500) {
+  problemi.push(`carico massimo ${massimoCarico}%: dati o calcolo non plausibili`);
+}
+
 const esito = {
   msCaricamento,
   msCambioFiltro: Math.round(msFiltro * 10) / 10,
@@ -282,6 +317,7 @@ const esito = {
   assegnazioneRiuscita,
   spostamentoRiuscito,
   impostazioni: { righePersone, capacitaSalvata, assenzePrima, assenzeDopo, assenzaEliminata },
+  dashboard: { indicatori: cifreDashboard.length, vistaTabellare, massimoCarico },
   problemi,
 };
 globalThis.console.log(JSON.stringify(esito, null, 2));

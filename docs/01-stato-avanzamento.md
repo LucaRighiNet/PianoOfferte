@@ -23,8 +23,10 @@ Riferimento: `docs/00-analisi-e-piano.md`. Aggiornato al 17 settembre 2026.
 | 14.6 | Dati di prova a volume realistico | Fatto | 780 offerte, 1883 attivita, 1103 dipendenze |
 | 14.7 | Date civili immuni a fuso e ora legale | Fatto | 21 test |
 | 14.8 | Autosave con tre stati e rollback visibile | Fatto | Indicatore Salvato / In corso / Non salvato |
+| S1 | Dashboard direzionale a quattro riquadri | Fatto | 25 test sulle metriche; verifica end-to-end su indicatori, griglia e vista tabellare |
+| S5 | Limite WIP con evidenza di superamento | Fatto | Visibile in dashboard e in Impostazioni |
 
-Test unitari: 157 su 9 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
+Test unitari: 185 su 10 file. Typecheck, lint e build puliti. Verifica end-to-end: nessun problema.
 
 ## Soglie prestazionali, ultima misura
 
@@ -52,27 +54,41 @@ si e ridotto. E' il primo indicatore da sorvegliare quando il volume crescera.
 | Stima del ridimensionamento calcolata con 8 ore fisse | Revisione del codice | Il client invia la data di fine, il server ricava le ore dal calendario reale |
 | Lo script di verifica lasciava righe residue in banca dati | Ispezione dello screenshot di Impostazioni | La voce di prova porta una nota irripetibile e viene eliminata per quella |
 | Campi di testo senza `type` esplicito, non selezionabili dai test | Fallimento della verifica | `type="text"` esplicito |
+| Lavoro collocato dieci mesi avanti, in silenzio, per una risorsa senza capacita netta | Dashboard: margini di -297 giorni sui dati di prova | Guardia sullo scostamento massimo, con tre test. Il motore era corretto: sbagliato era il prodotto |
+| Dati di prova con domanda superiore del 35% alla capacita: ogni persona sovraccarica | Ispezione della dashboard | Volume portato a 520 offerte, saturazione media 88% |
+| Il bilanciamento del seed distribuiva per ore assolute, non in rapporto alla capacita | Zoli Chiara all'827% | Bilanciamento sulla saturazione, non sulle ore |
+| Carico non-offerta che azzerava la capacita di una persona | Analisi della causa dello slittamento | Il seed lascia sempre almeno un'ora al giorno |
+| Due `void` per zittire variabili inutilizzate | Rilettura | Import e variabile rimossi |
 
 ## Cosa manca
 
 | Ambito | Nota |
 |---|---|
 | Autenticazione Entra ID e ruoli | Dipende da D5. L'audit registra gia un campo utente, oggi nullo |
-| Dashboard a quattro riquadri (S1) | E' il Taglio 3 |
 | Revisioni offerta (S2) | Taglio 3. Senza, il lead time misurato resta parziale |
 | Notifiche Teams e Outlook (S3) | Taglio 3 |
 | Consuntivo ore (S4) | Taglio 3. E' la funzione piu esposta all'art. 4: va rilasciata con l'informativa |
-| Limiti WIP in timeline (S5) | Il limite e configurabile e confrontato in Impostazioni, non ancora segnalato sulla timeline |
+| Limiti WIP sulla timeline (S5) | Segnalato in dashboard e Impostazioni, non ancora sulla corsia della persona |
 | Virtualizzazione verticale | Non ancora necessaria: la vista per risorsa ha 12 righe, le altre sono limitate a 40 gruppi |
 | Modifica dei template dei tipi di offerta | Scelta consapevole, par. 15.2.7 |
 
 ## Prossimo passo consigliato
 
-Il Taglio 2 del piano e di fatto assorbito nel Taglio 1: capacita, coda e
-dipendenze sono gia in esercizio. Il passo utile ora e il Taglio 3, e dentro
-quello il riquadro "A rischio" della dashboard, che e l'unica risposta alla
-domanda "cosa salta" senza scorrere la timeline.
+Tagli 1, 2 e 3 sono coperti salvo tre voci, e due delle tre sono bloccate da
+decisioni che non sono tecniche:
 
-Prima pero servono i numeri reali di D8, D9 e D10: senza, la heatmap e
-plausibile ma non vera, ed e su di essa che il responsabile prenderebbe
-decisioni.
+1. Revisioni offerta (S2). Non e bloccata: e il prossimo pezzo utile, perche
+   senza tracciare le revisioni il tempo di preparazione misurato resta
+   parziale e la mediana di 9 giorni sottostima il lavoro reale.
+2. Notifiche Teams e Outlook (S3). Servono credenziali Microsoft Graph: dipende
+   da D5.
+3. Consuntivo ore (S4). E' la funzione piu esposta all'art. 4 dello Statuto dei
+   Lavoratori. Ho deciso di NON costruirla prima che esistano informativa e
+   regolamento interno: e l'unica che misura a posteriori la prestazione
+   individuale, e rilasciarla senza copertura espone l'azienda, non lo
+   strumento. Vedi par. 14.1.
+
+Resta prioritario, sopra tutto il resto, ottenere i numeri reali di D8, D9 e
+D10. Oggi la dashboard dice 88% di saturazione media e 78% di consegne in
+tempo: sono cifre coerenti e credibili, ma calcolate su capacita inventate. Il
+responsabile prenderebbe decisioni su di esse.

@@ -759,6 +759,9 @@ confermate o corrette quando i dati reali saranno disponibili.
 | 15.2.6 | Il controllo di concorrenza e sulla sola radice della catena | I successori sono conseguenza della modifica, non modifiche indipendenti. Le loro versioni vengono comunque incrementate, cosi chi li stia modificando riceve un conflitto |
 | 15.2.7 | I template dei tipi di offerta sono in sola lettura in Impostazioni | Cambiare quali attivita nascono da una richiesta e una decisione di processo, non una regolazione da fare al volo fra due telefonate |
 | 15.2.8 | La saturazione considera tutto il lavoro pianificato, non solo quello filtrato | Nascondere meta del carico renderebbe la heatmap una bugia |
+| 15.2.9 | Il sistema rifiuta di collocare lavoro oltre 45 giorni dopo la data richiesta | Difetto trovato sui dati di prova: una persona con capacita netta zero faceva slittare il lavoro di dieci mesi, in silenzio. Il motore era corretto, il prodotto no: oltre quella soglia non e pianificazione, e occultamento |
+| 15.2.10 | Il colore del carico usa i tre passi di stato verde, ambra e rosso del palette di riferimento | Superano separazione per daltonismo e soglia a visione normale. L'ambra resta sotto il rapporto 3:1 su bianco, quindi ogni marca ambra porta sempre un numero visibile e la dashboard offre una vista tabellare: il colore non porta mai il significato da solo |
+| 15.2.11 | La dashboard usa una griglia per il carico, tabelle per gli elenchi e una cifra guida per i tempi | Il lavoro del lettore decide la forma. Un istogramma per i tempi sarebbe stato un grafico a una barra: il numero e il grafico |
 
 ### 15.3 Cosa resta scoperto e va deciso dal committente
 

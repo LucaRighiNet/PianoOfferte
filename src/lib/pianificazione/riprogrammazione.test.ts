@@ -199,3 +199,70 @@ describe('catena di successori', () => {
     expect(oreRadice).toBe(12);
   });
 });
+
+describe('guardia sullo scostamento', () => {
+  /**
+   * Il caso trovato sui dati di prova: una persona il cui carico non-offerta
+   * assorbe tutte le ore ha capacita netta zero. Senza guardia il lavoro veniva
+   * collocato dieci mesi dopo, in silenzio, e spariva dalla vista.
+   */
+  it('rifiuta di collocare il lavoro troppo lontano dalla data richiesta', () => {
+    const c = new CalendarioLavorativo(PERSONE, [
+      {
+        personaId: 'p1',
+        dataInizio: dataCivile('2026-09-01'),
+        dataFine: dataCivile('2027-06-30'),
+        oreGiorno: null,
+      },
+    ]);
+    const e = riprogrammaCatena(
+      c,
+      { id: 'a1', personaId: 'p1', stimaOre: 8, dataFineAttuale: null },
+      dataCivile('2026-09-16'),
+      [],
+    );
+    expect(e.aggiornate).toEqual([]);
+    expect(e.problemi).toHaveLength(1);
+    expect(e.problemi[0]?.motivo).toContain('non ha capacita disponibile prima del');
+    expect(e.problemi[0]?.motivo).toContain('2027-07-01');
+  });
+
+  it('uno slittamento breve resta ammesso', () => {
+    const c = new CalendarioLavorativo(PERSONE, [
+      {
+        personaId: 'p1',
+        dataInizio: dataCivile('2026-09-16'),
+        dataFine: dataCivile('2026-09-30'),
+        oreGiorno: null,
+      },
+    ]);
+    const e = riprogrammaCatena(
+      c,
+      { id: 'a1', personaId: 'p1', stimaOre: 8, dataFineAttuale: null },
+      dataCivile('2026-09-16'),
+      [],
+    );
+    expect(e.problemi).toEqual([]);
+    expect(e.aggiornate[0]?.dataInizio).toBe('2026-10-01');
+  });
+
+  it('la soglia e configurabile', () => {
+    const c = new CalendarioLavorativo(PERSONE, [
+      {
+        personaId: 'p1',
+        dataInizio: dataCivile('2026-09-16'),
+        dataFine: dataCivile('2026-09-30'),
+        oreGiorno: null,
+      },
+    ]);
+    const e = riprogrammaCatena(
+      c,
+      { id: 'a1', personaId: 'p1', stimaOre: 8, dataFineAttuale: null },
+      dataCivile('2026-09-16'),
+      [],
+      5,
+    );
+    expect(e.aggiornate).toEqual([]);
+    expect(e.problemi).toHaveLength(1);
+  });
+});
