@@ -1,0 +1,908 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  aggiungiGiorni,
+  confronta,
+  eWeekend,
+  giorniTra,
+  giornoSettimanaIso,
+  inizioSettimana,
+  type DataCivile,
+} from '@/lib/data/dataCivile';
+import { formatoBreve, formatoOre, formatoPercentuale } from '@/lib/data/formato';
+import {
+  CalendarioLavorativo,
+  type PersonaCapacita,
+  type VoceIndisponibilita,
+} from '@/lib/calendario/calendarioLavorativo';
+import {
+  aggregaCarico,
+  allocazionePerPersona,
+  caricoGiornaliero,
+  type CaricoGiorno,
+} from '@/lib/capacita/saturazione';
+import { impilaInCorsie } from '@/lib/timeline/corsie';
+import { collocaBarra, colonnaDelGiorno } from '@/lib/timeline/geometria';
+import {
+  ETICHETTE_SEMAFORO,
+  ETICHETTE_STATO,
+  statoVisualizzato,
+  valutaMargine,
+  type Semaforo,
+  type StatoAttivitaMemorizzato,
+} from '@/lib/offerta/rischio';
+import { costruisciGruppi } from '@/lib/vista/raggruppamento';
+import {
+  ETICHETTE_RAGGRUPPAMENTO,
+  LIVELLI_ZOOM,
+  ZOOM,
+  type LivelloZoom,
+  type Raggruppamento,
+} from '@/lib/vista/zoom';
+import type { AttivitaVista, PianoDati } from '@/lib/query/piano';
+import { IntestazioneTempo, type GiornoVista } from './IntestazioneTempo';
+import { RigaCapacita } from './RigaCapacita';
+import { BarraAttivita, type DatiBarra } from './BarraAttivita';
+import { CodaDaAssegnare, type VoceCoda } from './CodaDaAssegnare';
+import { Legenda } from './Legenda';
+import { Avatar, Chip, GruppoSegmentato, Pulsante, Selettore } from './ui';
+
+const LARGHEZZA_GRIGLIA = 244;
+const ALTEZZA_CAPACITA = 22;
+const ALTEZZA_CORSIA = 26;
+const ALTEZZA_BARRA = 18;
+/** Oltre questo numero di gruppi la vista non e leggibile: par. 1.2 del piano. */
+const MAX_GRUPPI_LEGGIBILI = 40;
+
+type FiltroStato = 'TUTTI' | 'ATTIVE' | 'COMPLETATE';
+const ETICHETTE_FILTRO_STATO: Readonly<Record<FiltroStato, string>> = {
+  TUTTI: 'Tutte',
+  ATTIVE: 'In corso',
+  COMPLETATE: 'Completate',
+};
+
+const COLORE_SEMAFORO: Readonly<Record<Semaforo, string>> = {
+  SENZA_SCADENZA: 'var(--testo-debole)',
+  VERDE: 'var(--semaforo-verde)',
+  AMBRA: 'var(--semaforo-ambra)',
+  ROSSO: 'var(--semaforo-rosso)',
+  SFORATA: 'var(--semaforo-sforata)',
+};
+
+type StatoSalvataggio =
+  | { readonly tipo: 'RIPOSO' }
+  | { readonly tipo: 'IN_CORSO' }
+  | { readonly tipo: 'SALVATO' }
+  | { readonly tipo: 'ERRORE'; readonly messaggio: string };
+
+export function Pianificatore({
+  dati,
+  ancoraIniziale,
+}: {
+  dati: PianoDati;
+  ancoraIniziale: DataCivile;
+}) {
+  const router = useRouter();
+  const [ancora, setAncora] = useState<DataCivile>(ancoraIniziale);
+  const [zoom, setZoom] = useState<LivelloZoom>('NORMALE');
+  const [modo, setModo] = useState<Raggruppamento>('RISORSA');
+  const [filtroStato, setFiltroStato] = useState<FiltroStato>('ATTIVE');
+  const [filtroPersona, setFiltroPersona] = useState<string>('');
+  const [filtroCliente, setFiltroCliente] = useState<string>('');
+  const [filtroKam, setFiltroKam] = useState<string>('');
+  const [selezionata, setSelezionata] = useState<string | null>(null);
+  const [tema, setTema] = useState<'chiaro' | 'scuro'>('chiaro');
+  const [salvataggio, setSalvataggio] = useState<StatoSalvataggio>({ tipo: 'RIPOSO' });
+  const [statiLocali, setStatiLocali] = useState<
+    ReadonlyMap<string, { stato: StatoAttivitaMemorizzato; versione: number }>
+  >(new Map());
+
+  const contenitore = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      const salvato = localStorage.getItem('tema');
+      if (salvato === 'scuro' || salvato === 'chiaro') {
+        setTema(salvato);
+        return;
+      }
+    } catch {
+      // Storage non disponibile: si resta sulla preferenza di sistema.
+    }
+    const scuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setTema(scuro ? 'scuro' : 'chiaro');
+  }, []);
+
+  const cambiaTema = useCallback(() => {
+    setTema((precedente) => {
+      const nuovo = precedente === 'scuro' ? 'chiaro' : 'scuro';
+      document.documentElement.setAttribute('data-tema', nuovo);
+      try {
+        localStorage.setItem('tema', nuovo);
+      } catch {
+        // La preferenza vale solo per questa sessione.
+      }
+      return nuovo;
+    });
+  }, []);
+
+  // --- finestra visibile -------------------------------------------------
+  const definizione = ZOOM[zoom];
+  const finestraDa = ancora;
+  const finestraA = aggiungiGiorni(ancora, definizione.giorniVisibili - 1);
+
+  // Il server carica un margine attorno alla finestra: se la navigazione esce
+  // dal caricato si ricarica, altrimenti lo spostamento e immediato.
+  const fuoriDalCaricato =
+    confronta(finestraDa, dati.finestraDa) < 0 || confronta(finestraA, dati.finestraA) > 0;
+
+  useEffect(() => {
+    if (!fuoriDalCaricato) return;
+    router.replace(`/pianificazione?da=${ancora}`);
+  }, [fuoriDalCaricato, ancora, router]);
+
+  // --- calendario e allocazione ------------------------------------------
+  const calendario = useMemo(() => {
+    const capacita: PersonaCapacita[] = dati.persone.map((p) => ({
+      id: p.id,
+      capacitaOreGiorno: p.capacitaOreGiorno,
+      percentualeContratto: p.percentualeContratto,
+    }));
+    const voci: VoceIndisponibilita[] = dati.indisponibilita.map((i) => ({
+      personaId: i.personaId,
+      dataInizio: i.dataInizio,
+      dataFine: i.dataFine,
+      oreGiorno: i.oreGiorno,
+    }));
+    return new CalendarioLavorativo(capacita, voci);
+  }, [dati.persone, dati.indisponibilita]);
+
+  const offerteMappa = useMemo(
+    () => new Map(dati.offerte.map((o) => [o.id, o])),
+    [dati.offerte],
+  );
+
+  const coloriTipo = useMemo(
+    () => new Map(dati.tipiAttivita.map((t) => [t.id, t.colore])),
+    [dati.tipiAttivita],
+  );
+
+  /** Applica al volo gli stati cambiati dall'utente ma non ancora ricaricati. */
+  const conStatoLocale = useCallback(
+    (a: AttivitaVista): AttivitaVista => {
+      const locale = statiLocali.get(a.id);
+      return locale ? { ...a, stato: locale.stato, versione: locale.versione } : a;
+    },
+    [statiLocali],
+  );
+
+  const attivitaPianificate = useMemo(
+    () =>
+      dati.attivita
+        .filter((a) => a.dataInizio !== null && a.dataFine !== null)
+        .map(conStatoLocale),
+    [dati.attivita, conStatoLocale],
+  );
+
+  // Il filtro non chiama il server: par. 7.3, sotto i 150 ms.
+  const attivitaFiltrate = useMemo(() => {
+    return attivitaPianificate.filter((a) => {
+      if (filtroPersona !== '' && a.personaId !== filtroPersona) return false;
+      const o = offerteMappa.get(a.offertaId);
+      if (!o) return false;
+      if (filtroCliente !== '' && o.clienteId !== filtroCliente) return false;
+      if (filtroKam !== '' && o.kamId !== filtroKam) return false;
+      if (filtroStato === 'ATTIVE' && a.stato === 'COMPLETATA') return false;
+      if (filtroStato === 'COMPLETATE' && a.stato !== 'COMPLETATA') return false;
+      return true;
+    });
+  }, [attivitaPianificate, filtroPersona, filtroCliente, filtroKam, filtroStato, offerteMappa]);
+
+  // La saturazione considera tutto il lavoro pianificato, non solo il filtrato:
+  // nascondere meta del carico renderebbe la heatmap una bugia.
+  const allocazione = useMemo(
+    () =>
+      allocazionePerPersona(
+        calendario,
+        attivitaPianificate.filter((a) => a.stato !== 'COMPLETATA'),
+      ),
+    [calendario, attivitaPianificate],
+  );
+
+  const giorni: readonly GiornoVista[] = useMemo(
+    () =>
+      giorniTra(finestraDa, finestraA).map((data) => ({
+        data,
+        weekend: eWeekend(data),
+        festivita: calendario.nomeFestivita(data),
+        oggi: data === dati.oggi,
+        inizioSettimana: giornoSettimanaIso(data) === 1,
+      })),
+    [finestraDa, finestraA, calendario, dati.oggi],
+  );
+
+  const personeVisibili = useMemo(
+    () => (filtroPersona === '' ? dati.persone : dati.persone.filter((p) => p.id === filtroPersona)),
+    [dati.persone, filtroPersona],
+  );
+
+  const gruppi = useMemo(
+    () =>
+      costruisciGruppi({
+        attivita: attivitaFiltrate,
+        offerte: offerteMappa,
+        persone: personeVisibili,
+        modo,
+      }),
+    [attivitaFiltrate, offerteMappa, personeVisibili, modo],
+  );
+
+  const gruppiTroncati = modo !== 'RISORSA' && gruppi.length > MAX_GRUPPI_LEGGIBILI;
+  const gruppiVisualizzati = gruppiTroncati ? gruppi.slice(0, MAX_GRUPPI_LEGGIBILI) : gruppi;
+
+  const coda: readonly VoceCoda[] = useMemo(() => {
+    return dati.attivita
+      .filter((a) => a.personaId === null || a.dataInizio === null)
+      .flatMap((a) => {
+        const o = offerteMappa.get(a.offertaId);
+        if (!o) return [];
+        if (filtroCliente !== '' && o.clienteId !== filtroCliente) return [];
+        if (filtroKam !== '' && o.kamId !== filtroKam) return [];
+        return [{ attivitaId: a.id, etichetta: a.tipoAttivita, stimaOre: a.stimaOre, offerta: o }];
+      });
+  }, [dati.attivita, offerteMappa, filtroCliente, filtroKam]);
+
+  const attivitaSelezionata = useMemo(() => {
+    if (selezionata === null) return null;
+    const a = dati.attivita.find((x) => x.id === selezionata);
+    return a ? conStatoLocale(a) : null;
+  }, [selezionata, dati.attivita, conStatoLocale]);
+
+  // --- cambio stato ------------------------------------------------------
+  const cambiaStato = useCallback(
+    async (attivita: AttivitaVista, nuovo: StatoAttivitaMemorizzato) => {
+      const causale = nuovo === 'BLOCCATA' ? 'ATTESA_DATO_CLIENTE' : null;
+      const versionePrecedente = attivita.versione;
+      const statoPrecedente = attivita.stato;
+
+      // Aggiornamento ottimistico: il riscontro e immediato (par. 7.3).
+      setStatiLocali((m) =>
+        new Map(m).set(attivita.id, { stato: nuovo, versione: versionePrecedente }),
+      );
+      setSalvataggio({ tipo: 'IN_CORSO' });
+
+      try {
+        const risposta = await fetch(`/api/attivita/${attivita.id}/stato`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ stato: nuovo, causaleBlocco: causale, versione: versionePrecedente }),
+        });
+
+        if (!risposta.ok) {
+          // Rollback esplicito: par. 14.8, le modifiche non confermate non
+          // spariscono in silenzio.
+          setStatiLocali((m) =>
+            new Map(m).set(attivita.id, { stato: statoPrecedente, versione: versionePrecedente }),
+          );
+          const messaggio =
+            risposta.status === 409
+              ? 'Modificata da un altro utente: ricarica per vedere la versione aggiornata'
+              : `Salvataggio non riuscito (${risposta.status})`;
+          setSalvataggio({ tipo: 'ERRORE', messaggio });
+          return;
+        }
+
+        const corpo = (await risposta.json()) as { stato: StatoAttivitaMemorizzato; versione: number };
+        setStatiLocali((m) =>
+          new Map(m).set(attivita.id, { stato: corpo.stato, versione: corpo.versione }),
+        );
+        setSalvataggio({ tipo: 'SALVATO' });
+      } catch {
+        setStatiLocali((m) =>
+          new Map(m).set(attivita.id, { stato: statoPrecedente, versione: versionePrecedente }),
+        );
+        setSalvataggio({ tipo: 'ERRORE', messaggio: 'Rete non raggiungibile' });
+      }
+    },
+    [],
+  );
+
+  // Tasti rapidi 1-4 sull'attivita selezionata: M7, avanzamento a un click.
+  useEffect(() => {
+    function suTasto(e: KeyboardEvent): void {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (attivitaSelezionata === null) return;
+      const mappa: Readonly<Record<string, StatoAttivitaMemorizzato>> = {
+        '1': 'NON_INIZIATA',
+        '2': 'IN_CORSO',
+        '3': 'BLOCCATA',
+        '4': 'COMPLETATA',
+      };
+      const nuovo = mappa[e.key];
+      if (!nuovo) return;
+      e.preventDefault();
+      void cambiaStato(attivitaSelezionata, nuovo);
+    }
+    window.addEventListener('keydown', suTasto);
+    return () => window.removeEventListener('keydown', suTasto);
+  }, [attivitaSelezionata, cambiaStato]);
+
+  const azzeraFiltri = useCallback(() => {
+    setFiltroPersona('');
+    setFiltroCliente('');
+    setFiltroKam('');
+    setFiltroStato('ATTIVE');
+  }, []);
+
+  const filtriAttivi =
+    filtroPersona !== '' || filtroCliente !== '' || filtroKam !== '' || filtroStato !== 'ATTIVE';
+
+  const larghezzaTimeline = giorni.length * definizione.larghezzaGiorno;
+  const colonnaOggi = colonnaDelGiorno(finestraDa, finestraA, dati.oggi);
+
+  const kamDisponibili = useMemo(
+    () => dati.persone.filter((p) => dati.offerte.some((o) => o.kamId === p.id)),
+    [dati.persone, dati.offerte],
+  );
+
+  return (
+    <div className="flex h-screen flex-col">
+      <Intestazione tema={tema} onCambiaTema={cambiaTema} salvataggio={salvataggio} />
+
+      <div
+        className="flex flex-wrap items-center gap-2 border-b px-3 py-2"
+        style={{ borderColor: 'var(--bordo)', background: 'var(--sfondo-pannello)' }}
+      >
+        <Pulsante
+          onClick={() => setAncora(aggiungiGiorni(ancora, -definizione.giorniVisibili))}
+          titolo="Periodo precedente"
+        >
+          ‹
+        </Pulsante>
+        <Pulsante
+          onClick={() => setAncora(inizioSettimana(aggiungiGiorni(dati.oggi, -14)))}
+          titolo="Torna a oggi"
+        >
+          Oggi
+        </Pulsante>
+        <Pulsante
+          onClick={() => setAncora(aggiungiGiorni(ancora, definizione.giorniVisibili))}
+          titolo="Periodo successivo"
+        >
+          ›
+        </Pulsante>
+
+        <span className="px-1 text-[12px]" style={{ color: 'var(--testo-tenue)' }}>
+          {formatoBreve(finestraDa)} — {formatoBreve(finestraA)}
+        </span>
+
+        <span className="mx-1 h-5 w-px" style={{ background: 'var(--bordo)' }} />
+
+        <GruppoSegmentato
+          valori={LIVELLI_ZOOM}
+          etichette={{
+            FITTO: ZOOM.FITTO.etichetta,
+            NORMALE: ZOOM.NORMALE.etichetta,
+            COMPATTO: ZOOM.COMPATTO.etichetta,
+          }}
+          selezionato={zoom}
+          onCambia={setZoom}
+        />
+
+        <GruppoSegmentato
+          valori={['RISORSA', 'OFFERTA', 'CLIENTE', 'KAM'] as const}
+          etichette={ETICHETTE_RAGGRUPPAMENTO}
+          selezionato={modo}
+          onCambia={setModo}
+        />
+
+        <GruppoSegmentato
+          valori={['TUTTI', 'ATTIVE', 'COMPLETATE'] as const}
+          etichette={ETICHETTE_FILTRO_STATO}
+          selezionato={filtroStato}
+          onCambia={setFiltroStato}
+        />
+
+        <span className="mx-1 h-5 w-px" style={{ background: 'var(--bordo)' }} />
+
+        <Selettore
+          etichetta="Risorsa"
+          valore={filtroPersona}
+          opzioni={dati.persone.map((p) => ({ valore: p.id, testo: `${p.cognome} ${p.nome}` }))}
+          onCambia={setFiltroPersona}
+        />
+        <Selettore
+          etichetta="Cliente"
+          valore={filtroCliente}
+          opzioni={dati.clienti.map((c) => ({ valore: c.id, testo: c.nome }))}
+          onCambia={setFiltroCliente}
+        />
+        <Selettore
+          etichetta="KAM"
+          valore={filtroKam}
+          opzioni={kamDisponibili.map((p) => ({ valore: p.id, testo: `${p.cognome} ${p.nome}` }))}
+          onCambia={setFiltroKam}
+        />
+
+        {filtriAttivi ? (
+          <Pulsante onClick={azzeraFiltri} titolo="Azzera i filtri">
+            ✕
+          </Pulsante>
+        ) : null}
+
+        <span className="ml-auto text-[11px]" style={{ color: 'var(--testo-debole)' }}>
+          {attivitaFiltrate.length} attivita · {gruppi.length} righe
+        </span>
+      </div>
+
+      <Legenda tipi={dati.tipiAttivita} />
+
+      <div className="flex min-h-0 flex-1">
+        <div ref={contenitore} className="min-w-0 flex-1 overflow-auto">
+          <div style={{ width: LARGHEZZA_GRIGLIA + larghezzaTimeline, minWidth: '100%' }}>
+            <div className="sticky top-0 z-40 flex" style={{ background: 'var(--sfondo-pannello)' }}>
+              <div
+                className="sticky left-0 z-50 shrink-0 border-r"
+                style={{
+                  width: LARGHEZZA_GRIGLIA,
+                  borderColor: 'var(--bordo-forte)',
+                  background: 'var(--sfondo-pannello)',
+                }}
+              >
+                <div
+                  className="flex h-full items-end px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide"
+                  style={{ color: 'var(--testo-debole)' }}
+                >
+                  {modo === 'RISORSA' ? 'Risorsa e carico' : ETICHETTE_RAGGRUPPAMENTO[modo]}
+                </div>
+              </div>
+              <IntestazioneTempo
+                giorni={giorni}
+                larghezzaGiorno={definizione.larghezzaGiorno}
+                mostraGiorni={definizione.mostraGiorni}
+              />
+            </div>
+
+            <div className="relative">
+              {colonnaOggi !== null ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-0 bottom-0 z-20 w-px"
+                  style={{
+                    left: LARGHEZZA_GRIGLIA + colonnaOggi * definizione.larghezzaGiorno,
+                    background: 'var(--oggi)',
+                  }}
+                />
+              ) : null}
+
+              {gruppi.length === 0 ? (
+                <p className="px-4 py-8 text-[13px]" style={{ color: 'var(--testo-debole)' }}>
+                  Nessuna attivita nel periodo con i filtri attivi.
+                </p>
+              ) : (
+                gruppiVisualizzati.map((gruppo) => (
+                  <RigaGruppo
+                    key={gruppo.chiave}
+                    gruppo={gruppo}
+                    giorni={giorni}
+                    finestraDa={finestraDa}
+                    finestraA={finestraA}
+                    larghezzaGiorno={definizione.larghezzaGiorno}
+                    calendario={calendario}
+                    coloriTipo={coloriTipo}
+                    allocazione={
+                      gruppo.personaId !== null ? allocazione.get(gruppo.personaId) : undefined
+                    }
+                    offerteMappa={offerteMappa}
+                    oggi={dati.oggi}
+                    selezionata={selezionata}
+                    onSeleziona={setSelezionata}
+                  />
+                ))
+              )}
+              {gruppiTroncati ? (
+                <p
+                  className="px-4 py-3 text-[12px]"
+                  style={{ color: 'var(--semaforo-ambra)' }}
+                  role="status"
+                  data-prova="troncamento"
+                >
+                  Mostrate {MAX_GRUPPI_LEGGIBILI} righe su {gruppi.length}. Questa vista e
+                  leggibile solo filtrata: restringi per cliente, KAM o risorsa, oppure usa la
+                  vista per risorsa.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <CodaDaAssegnare
+          voci={coda}
+          oggi={dati.oggi}
+          selezionata={selezionata}
+          onSeleziona={setSelezionata}
+        />
+      </div>
+
+      {attivitaSelezionata ? (
+        <DettaglioSelezione
+          attivita={attivitaSelezionata}
+          offerta={offerteMappa.get(attivitaSelezionata.offertaId) ?? null}
+          persone={dati.persone}
+          oggi={dati.oggi}
+          calendario={calendario}
+          onCambiaStato={(nuovo) => void cambiaStato(attivitaSelezionata, nuovo)}
+          onChiudi={() => setSelezionata(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function Intestazione({
+  tema,
+  onCambiaTema,
+  salvataggio,
+}: {
+  tema: 'chiaro' | 'scuro';
+  onCambiaTema: () => void;
+  salvataggio: StatoSalvataggio;
+}) {
+  return (
+    <header
+      className="flex items-center gap-3 border-b px-4 py-2"
+      style={{ borderColor: 'var(--bordo)', background: 'var(--sfondo-pannello)' }}
+    >
+      <span className="text-[15px] font-semibold tracking-tight">righi solutions</span>
+      <span className="text-[14px]" style={{ color: 'var(--testo-tenue)' }}>
+        Pianificazione Offerte
+      </span>
+      <span
+        className="rounded-full px-2 py-[1px] text-[10px] font-semibold"
+        style={{ background: 'var(--accento-tenue)', color: 'var(--accento)' }}
+      >
+        v2 alpha
+      </span>
+
+      <div className="ml-auto flex items-center gap-3">
+        <IndicatoreSalvataggio stato={salvataggio} />
+        <Pulsante onClick={onCambiaTema} titolo="Cambia tema">
+          {tema === 'scuro' ? '☀' : '☾'}
+        </Pulsante>
+      </div>
+    </header>
+  );
+}
+
+function IndicatoreSalvataggio({ stato }: { stato: StatoSalvataggio }) {
+  if (stato.tipo === 'RIPOSO') return null;
+
+  const configurazione = {
+    IN_CORSO: { testo: 'Salvataggio…', colore: 'var(--testo-tenue)' },
+    SALVATO: { testo: 'Salvato', colore: 'var(--semaforo-verde)' },
+    ERRORE: { testo: 'Non salvato', colore: 'var(--semaforo-rosso)' },
+  }[stato.tipo];
+
+  return (
+    <span
+      className="flex items-center gap-1.5 text-[12px]"
+      data-prova="salvataggio"
+      style={{ color: configurazione.colore }}
+      title={stato.tipo === 'ERRORE' ? stato.messaggio : undefined}
+      role="status"
+      aria-live="polite"
+    >
+      <span
+        aria-hidden="true"
+        className="h-2 w-2 rounded-full"
+        style={{ background: configurazione.colore }}
+      />
+      {configurazione.testo}
+    </span>
+  );
+}
+
+function RigaGruppo({
+  gruppo,
+  giorni,
+  finestraDa,
+  finestraA,
+  larghezzaGiorno,
+  calendario,
+  coloriTipo,
+  allocazione,
+  offerteMappa,
+  oggi,
+  selezionata,
+  onSeleziona,
+}: {
+  gruppo: ReturnType<typeof costruisciGruppi>[number];
+  giorni: readonly GiornoVista[];
+  finestraDa: DataCivile;
+  finestraA: DataCivile;
+  larghezzaGiorno: number;
+  calendario: CalendarioLavorativo;
+  coloriTipo: ReadonlyMap<string, string>;
+  allocazione: ReadonlyMap<DataCivile, number> | undefined;
+  offerteMappa: ReadonlyMap<string, PianoDati['offerte'][number]>;
+  oggi: DataCivile;
+  selezionata: string | null;
+  onSeleziona: (id: string) => void;
+}) {
+  const visibili = useMemo(
+    () =>
+      gruppo.attivita.filter(
+        (a) =>
+          a.dataInizio !== null &&
+          a.dataFine !== null &&
+          confronta(a.dataInizio, finestraA) <= 0 &&
+          confronta(a.dataFine, finestraDa) >= 0,
+      ),
+    [gruppo.attivita, finestraDa, finestraA],
+  );
+
+  const impilate = useMemo(
+    () =>
+      impilaInCorsie(
+        visibili.map((a) => ({
+          id: a.id,
+          inizio: a.dataInizio as DataCivile,
+          fine: a.dataFine as DataCivile,
+          attivita: a,
+        })),
+      ),
+    [visibili],
+  );
+
+  const carico: readonly CaricoGiorno[] | null = useMemo(() => {
+    if (gruppo.personaId === null) return null;
+    return caricoGiornaliero(calendario, gruppo.personaId, finestraDa, finestraA, allocazione);
+  }, [gruppo.personaId, calendario, finestraDa, finestraA, allocazione]);
+
+  const riepilogo = useMemo(() => (carico ? aggregaCarico(carico) : null), [carico]);
+
+  const numeroCorsie = Math.max(1, impilate.corsie);
+  const altezzaTotale = (carico ? ALTEZZA_CAPACITA : 0) + numeroCorsie * ALTEZZA_CORSIA;
+
+  return (
+    <div className="flex border-b" style={{ borderColor: 'var(--bordo)' }}>
+      <div
+        className="sticky left-0 z-10 shrink-0 border-r px-3 py-1.5"
+        style={{
+          width: LARGHEZZA_GRIGLIA,
+          minHeight: altezzaTotale,
+          borderColor: 'var(--bordo-forte)',
+          background: 'var(--sfondo-pannello)',
+        }}
+      >
+        <div className="flex items-center gap-1.5">
+          {gruppo.avatar ? (
+            <Avatar
+              iniziali={gruppo.avatar.iniziali}
+              colore={gruppo.avatar.colore}
+              titolo={gruppo.avatar.titolo}
+            />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ background: gruppo.colore }}
+            />
+          )}
+          <span className="truncate text-[12px] font-semibold" title={gruppo.titolo}>
+            {gruppo.titolo}
+          </span>
+        </div>
+
+        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+          {gruppo.etichette.map((e) => (
+            <Chip key={e.testo} titolo={e.titolo}>
+              {e.testo}
+            </Chip>
+          ))}
+          {riepilogo ? (
+            <Chip
+              titolo={`Nel periodo: ${formatoOre(riepilogo.oreAllocate)} allocate su ${formatoOre(
+                riepilogo.oreDisponibili,
+              )} disponibili`}
+              colore={
+                riepilogo.fascia === 'SOVRACCARICO'
+                  ? 'var(--semaforo-rosso)'
+                  : riepilogo.fascia === 'PIENO'
+                    ? 'var(--semaforo-ambra)'
+                    : undefined
+              }
+            >
+              {formatoPercentuale(riepilogo.percentuale)}
+            </Chip>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="relative shrink-0" style={{ minHeight: altezzaTotale }}>
+        <div className="pointer-events-none absolute inset-0 flex" aria-hidden="true">
+          {giorni.map((g) => (
+            <div
+              key={g.data}
+              className="fascia-giorno h-full"
+              data-weekend={g.weekend}
+              data-festivita={g.festivita !== null}
+              data-oggi={g.oggi}
+              data-inizio-settimana={g.inizioSettimana}
+              style={{ width: larghezzaGiorno }}
+            />
+          ))}
+        </div>
+
+        {carico ? (
+          <RigaCapacita
+            carico={carico}
+            larghezzaGiorno={larghezzaGiorno}
+            altezza={ALTEZZA_CAPACITA}
+          />
+        ) : null}
+
+        <div className="relative" style={{ height: numeroCorsie * ALTEZZA_CORSIA }}>
+          {impilate.elementi.map(({ elemento, corsia }) => {
+            const a = elemento.attivita;
+            const inizio = a.dataInizio as DataCivile;
+            const fine = a.dataFine as DataCivile;
+            const collocazione = collocaBarra(finestraDa, finestraA, larghezzaGiorno, inizio, fine);
+            if (!collocazione) return null;
+
+            const offerta = offerteMappa.get(a.offertaId);
+            const nonLavorativi: number[] = [];
+            if (a.personaId !== null) {
+              for (const giorno of giorniTra(inizio, fine)) {
+                const colonna = colonnaDelGiorno(finestraDa, finestraA, giorno);
+                if (colonna === null) continue;
+                if (!calendario.eGiornoLavorativo(a.personaId, giorno)) nonLavorativi.push(colonna);
+              }
+            }
+
+            const margine = valutaMargine(fine, offerta?.dataScadenzaCliente ?? null, {
+              calendario,
+              personaId: a.personaId,
+            });
+
+            const barra: DatiBarra = {
+              id: a.id,
+              etichetta: a.tipoAttivita,
+              offertaCodice: offerta?.codice ?? '',
+              offertaDescrizione: offerta?.descrizione ?? '',
+              cliente: offerta?.cliente ?? '',
+              persona: null,
+              coloreTipo: coloriTipo.get(a.tipoAttivitaId) ?? 'var(--accento)',
+              coloreOfferta: offerta?.colore ?? 'var(--accento)',
+              stato: statoVisualizzato(
+                { stato: a.stato, dataFine: a.dataFine, iniziataIl: a.iniziataIl },
+                oggi,
+              ),
+              semaforo: margine.semaforo,
+              scadenza: offerta?.dataScadenzaCliente ?? null,
+              stimaOre: a.stimaOre,
+              dataInizio: inizio,
+              dataFine: fine,
+              giorniNonLavorativi: nonLavorativi,
+            };
+
+            return (
+              <BarraAttivita
+                key={a.id}
+                dati={barra}
+                collocazione={collocazione}
+                larghezzaGiorno={larghezzaGiorno}
+                altezza={ALTEZZA_BARRA}
+                alto={corsia * ALTEZZA_CORSIA + (ALTEZZA_CORSIA - ALTEZZA_BARRA) / 2}
+                selezionata={selezionata === a.id}
+                onSeleziona={onSeleziona}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DettaglioSelezione({
+  attivita,
+  offerta,
+  persone,
+  oggi,
+  calendario,
+  onCambiaStato,
+  onChiudi,
+}: {
+  attivita: AttivitaVista;
+  offerta: PianoDati['offerte'][number] | null;
+  persone: readonly PianoDati['persone'][number][];
+  oggi: DataCivile;
+  calendario: CalendarioLavorativo;
+  onCambiaStato: (nuovo: StatoAttivitaMemorizzato) => void;
+  onChiudi: () => void;
+}) {
+  const persona = persone.find((p) => p.id === attivita.personaId) ?? null;
+  const margine = valutaMargine(attivita.dataFine, offerta?.dataScadenzaCliente ?? null, {
+    calendario,
+    personaId: attivita.personaId,
+  });
+  const derivato = statoVisualizzato(
+    { stato: attivita.stato, dataFine: attivita.dataFine, iniziataIl: attivita.iniziataIl },
+    oggi,
+  );
+
+  const stati: readonly StatoAttivitaMemorizzato[] = [
+    'NON_INIZIATA',
+    'IN_CORSO',
+    'BLOCCATA',
+    'COMPLETATA',
+  ];
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-3 border-t px-4 py-2"
+      style={{ borderColor: 'var(--bordo)', background: 'var(--sfondo-pannello)' }}
+    >
+      <span
+        aria-hidden="true"
+        className="h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ background: offerta?.colore ?? 'var(--accento)' }}
+      />
+      <div className="min-w-0">
+        <div className="truncate text-[12px] font-semibold">
+          {offerta?.descrizione ?? 'Offerta'} · {attivita.tipoAttivita}
+        </div>
+        <div className="truncate text-[11px]" style={{ color: 'var(--testo-tenue)' }}>
+          {offerta?.cliente ?? '—'} · {offerta?.codice ?? '—'} ·{' '}
+          {persona ? `${persona.nome} ${persona.cognome}` : 'Non assegnata'} ·{' '}
+          {formatoOre(attivita.stimaOre)}
+          {attivita.dataInizio && attivita.dataFine
+            ? ` · ${formatoBreve(attivita.dataInizio)} — ${formatoBreve(attivita.dataFine)}`
+            : ''}
+        </div>
+      </div>
+
+      {offerta?.dataScadenzaCliente ? (
+        <span
+          className="rounded-md border px-2 py-1 text-[11px]"
+          style={{
+            borderColor: COLORE_SEMAFORO[margine.semaforo],
+            color: COLORE_SEMAFORO[margine.semaforo],
+          }}
+          title={`Scadenza cliente ${formatoBreve(offerta.dataScadenzaCliente)} · ${
+            ETICHETTE_SEMAFORO[margine.semaforo]
+          }`}
+        >
+          Scadenza {formatoBreve(offerta.dataScadenzaCliente)}
+          {margine.margineGiorniLavorativi !== null
+            ? ` · margine ${margine.margineGiorniLavorativi} gg lav.`
+            : ''}
+        </span>
+      ) : null}
+
+      <div className="ml-auto flex items-center gap-1.5">
+        <span className="text-[11px]" style={{ color: 'var(--testo-debole)' }}>
+          Stato: {ETICHETTE_STATO[derivato]}
+        </span>
+        {stati.map((s, indice) => (
+          <Pulsante
+            key={s}
+            onClick={() => onCambiaStato(s)}
+            attivo={attivita.stato === s}
+            titolo={`${ETICHETTE_STATO[s]} (tasto ${indice + 1})`}
+          >
+            {ETICHETTE_STATO[s]}
+          </Pulsante>
+        ))}
+        <Pulsante onClick={onChiudi} titolo="Chiudi il dettaglio">
+          ✕
+        </Pulsante>
+      </div>
+    </div>
+  );
+}

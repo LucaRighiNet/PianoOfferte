@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['.next/**', 'node_modules/**', 'src/generated/**'] },
+  { ignores: ['.next/**', 'node_modules/**', 'src/generated/**', 'next-env.d.ts'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -17,6 +17,16 @@ export default tseslint.config(
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       eqeqeq: ['error', 'always'],
       'no-throw-literal': 'error',
+    },
+  },
+  {
+    // Gli script di verifica girano in Node ma pilotano un browser.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { globalThis: 'readonly', process: 'readonly' },
+    },
+    rules: {
+      'no-console': 'off',
     },
   },
 );

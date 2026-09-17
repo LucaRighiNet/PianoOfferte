@@ -1,0 +1,146 @@
+@import 'tailwindcss';
+
+/*
+ * Token di tema. Par. 2.3 del piano: il tema chiaro e scuro del beta va
+ * replicato, e va fatto con token perche le tinte compaiono in molti punti
+ * (heatmap, semafori, stati, fasce non lavorative).
+ */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+
+  --sfondo: #f6f7f9;
+  --sfondo-pannello: #ffffff;
+  --sfondo-tenue: #f1f3f6;
+  --sfondo-hover: #eceff3;
+  --bordo: #e2e6ec;
+  --bordo-forte: #cbd2dc;
+  --testo: #1a2230;
+  --testo-tenue: #667085;
+  --testo-debole: #98a2b3;
+
+  --accento: #0d9488;
+  --accento-tenue: #ccfbf1;
+
+  /* Fasce di carico, par. 6 del piano */
+  --carico-non-lavorativo: #e7eaef;
+  --carico-scarico: #dbe4ee;
+  --carico-sano: #86c99b;
+  --carico-pieno: #f0c05a;
+  --carico-sovraccarico: #e5736b;
+
+  /* Semafori di margine sulla scadenza */
+  --semaforo-verde: #16a34a;
+  --semaforo-ambra: #d97706;
+  --semaforo-rosso: #dc2626;
+  --semaforo-sforata: #991b1b;
+
+  --oggi: #2563eb;
+  --oggi-colonna: rgba(37, 99, 235, 0.07);
+  --weekend: rgba(15, 23, 42, 0.035);
+  --festivita: rgba(220, 38, 38, 0.06);
+  --assenza: rgba(100, 116, 139, 0.16);
+
+  --ombra-pannello: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.1);
+}
+
+:root[data-tema='scuro'] {
+  color-scheme: dark;
+
+  --sfondo: #0e131b;
+  --sfondo-pannello: #161c26;
+  --sfondo-tenue: #1c2431;
+  --sfondo-hover: #232c3b;
+  --bordo: #283040;
+  --bordo-forte: #3a4557;
+  --testo: #e8ecf2;
+  --testo-tenue: #97a3b6;
+  --testo-debole: #6b7891;
+
+  --accento: #2dd4bf;
+  --accento-tenue: #134e4a;
+
+  --carico-non-lavorativo: #1e2633;
+  --carico-scarico: #2b3647;
+  --carico-sano: #3f8f5c;
+  --carico-pieno: #b5852c;
+  --carico-sovraccarico: #b4453d;
+
+  --semaforo-verde: #4ade80;
+  --semaforo-ambra: #fbbf24;
+  --semaforo-rosso: #f87171;
+  --semaforo-sforata: #ef4444;
+
+  --oggi: #60a5fa;
+  --oggi-colonna: rgba(96, 165, 250, 0.1);
+  --weekend: rgba(255, 255, 255, 0.03);
+  --festivita: rgba(248, 113, 113, 0.08);
+  --assenza: rgba(148, 163, 184, 0.14);
+
+  --ombra-pannello: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--sfondo);
+  color: var(--testo);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* La griglia temporale: una colonna per giorno, larghezza guidata da una
+   variabile cosi lo zoom e un solo cambio di valore invece di un ricalcolo. */
+.griglia-tempo {
+  display: grid;
+  grid-auto-rows: min-content;
+  grid-template-columns: repeat(var(--giorni), var(--larghezza-giorno));
+}
+
+.fascia-giorno {
+  border-right: 1px solid var(--bordo);
+}
+
+.fascia-giorno[data-weekend='true'] {
+  background: var(--weekend);
+}
+
+.fascia-giorno[data-festivita='true'] {
+  background: var(--festivita);
+}
+
+.fascia-giorno[data-oggi='true'] {
+  background: var(--oggi-colonna);
+}
+
+.fascia-giorno[data-inizio-settimana='true'] {
+  border-left: 1px solid var(--bordo-forte);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
